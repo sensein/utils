@@ -23,3 +23,41 @@ Single-file browser workbench for streaming microphone analysis.
 Open the HTML page in a modern browser. For microphone access, `http://localhost` is often more reliable than `file://`.
 
 If you publish this repository with GitHub Pages, the catalog page will expose a direct live link to this utility.
+
+## Future agent prompt
+
+Use this prompt when handing the utility to a future coding agent:
+
+```text
+Continue work on the single-file browser utility at `utilities/streaming-audio-workbench/streaming_audio_workbench.html`.
+
+This page is a distributable live microphone analysis workbench and should remain easy to ship as a standalone HTML file.
+
+Current feature set:
+- live microphone streaming with pause/resume
+- persistent in-memory audio history so older audio can be revisited after it scrolls out of view
+- pan controls plus a viewport slider
+- full wipe reset that stops capture, clears memory, and restores defaults
+- WAV export and PNG snapshot export
+- analysis-rate selection at 8, 10, or 16 kHz
+- waveform with a low-passed Hilbert-envelope overlay
+- fixed-window spectrogram with optional preemphasis
+- draggable selection window on the waveform that controls only the spectrum and MFCC / CPP panels
+- waveform autoscale toggle
+- CPP location marked in the cepstral view
+- browser, OS, and microphone metadata shown in the status area
+
+Important implementation details from prior work:
+- the Hilbert envelope should be computed as the fullband analytic magnitude `|x + jH{x}|`, then low-passed at 50 Hz, without the earlier subband approach
+- the spectrogram STFT window is fixed and should not change when the spectrum/MFCC selection width changes
+- the spectrum and MFCC panels are driven by the movable waveform selection
+- CPP was stabilized by estimating a plausible pitch period from normalized autocorrelation and then searching for the cepstral peak near that period
+- selection drag math uses the actual visible audio span so the window can move across the full viewport
+- PNG export first tries DOM rasterization and then falls back to display capture when canvases are tainted
+
+Working constraints:
+- preserve the single-file distributable nature of this HTML page whenever possible
+- keep the landscape-friendly left control sidebar layout
+- if behavior changes, update the lightweight contract test in `tests/test_streaming_audio_workbench_page.py` in the source project where this page originated
+- prefer concise inline documentation and avoid introducing unnecessary external dependencies
+```
