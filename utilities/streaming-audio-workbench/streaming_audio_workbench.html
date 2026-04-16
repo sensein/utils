@@ -639,6 +639,7 @@
                   <div class="mini-field">
                     <span class="mini-label">Rate</span>
                     <select id="analysisRateSelect">
+                      <option value="original">Original</option>
                       <option value="8000">8 kHz</option>
                       <option value="10000">10 kHz</option>
                       <option value="16000" selected>16 kHz</option>
@@ -753,7 +754,7 @@
         loadedAudioLabel: "",
         chunks: [],
         totalSamples: 0,
-        analysisRate: 16000,
+        analysisRate: "16000",
         playbackMode: "start",
         viewDurationSec: 6.0,
         viewportStartSec: 0.0,
@@ -960,6 +961,13 @@
         elements.playbackModeSelect.disabled = !hasBufferedAudio;
       }
 
+      function getEffectiveAnalysisRate() {
+        if (state.analysisRate === "original") {
+          return state.inputSampleRate || 16000;
+        }
+        return Number(state.analysisRate) || 16000;
+      }
+
       function updateWindowWidthOutput() {
         elements.windowWidthOutput.textContent = `${Math.round(state.selectionWidthSec * 1000)} ms`;
       }
@@ -1013,10 +1021,15 @@
 
       function describeViewport() {
         const viewport = getViewportBounds();
+        const analysisRate = getEffectiveAnalysisRate();
+        const analysisRateLabel =
+          state.analysisRate === "original"
+            ? `original ${Math.round(analysisRate)} Hz`
+            : `${analysisRate / 1000} kHz`;
         elements.waveformSubtitle.textContent =
           `Viewport ${viewport.start.toFixed(2)}-${viewport.end.toFixed(2)} s with |x + jH{x}| low-passed at ${state.hilbertEnvelopeCutoffHz} Hz${state.waveformAutoScale ? ", autoscaled" : ", fixed +/-1 scale"}; cursor ${state.playCursorSec.toFixed(2)} s`;
         elements.spectrogramSubtitle.textContent =
-          `${state.analysisRate / 1000} kHz analysis, ${Math.round(state.spectrogramFrameSec * 1000)} ms frame, ${Math.round(state.spectrogramHopSec * 1000)} ms hop${state.usePreemphasis ? ", preemphasis on" : ""}`;
+          `${analysisRateLabel} analysis, ${Math.round(state.spectrogramFrameSec * 1000)} ms frame, ${Math.round(state.spectrogramHopSec * 1000)} ms hop${state.usePreemphasis ? ", preemphasis on" : ""}`;
       }
 
       function scheduleRender() {
@@ -2567,7 +2580,7 @@
         state.loadedAudioLabel = "";
         state.chunks = [];
         state.totalSamples = 0;
-        state.analysisRate = 16000;
+        state.analysisRate = "16000";
         state.viewDurationSec = 6.0;
         state.viewportStartSec = 0.0;
         state.selectionCenterSec = 0.015;
@@ -2715,6 +2728,7 @@
           const viewportEnd = viewport.end;
           const visibleRaw = extractSegment(viewportStart, viewportEnd);
           const envelopeRate = Math.min(2000, state.inputSampleRate);
+          const analysisRate = getEffectiveAnalysisRate();
           const fullbandEnvelope = computeHilbertEnvelope(
             visibleRaw,
             state.inputSampleRate,
@@ -2722,14 +2736,14 @@
           );
           const envelope = resampleLinear(fullbandEnvelope, state.inputSampleRate, envelopeRate);
 
-          let analysisSignal = resampleLinear(visibleRaw, state.inputSampleRate, state.analysisRate);
+          let analysisSignal = resampleLinear(visibleRaw, state.inputSampleRate, analysisRate);
           if (state.usePreemphasis) {
             analysisSignal = applyPreemphasis(analysisSignal);
           }
 
-          const frameLength = Math.max(64, Math.round(state.spectrogramFrameSec * state.analysisRate));
-          const hopLength = Math.max(16, Math.round(state.spectrogramHopSec * state.analysisRate));
-          const spectrogram = computeSpectrogram(analysisSignal, state.analysisRate, frameLength, hopLength);
+          const frameLength = Math.max(64, Math.round(state.spectrogramFrameSec * analysisRate));
+          const hopLength = Math.max(16, Math.round(state.spectrogramHopSec * analysisRate));
+          const spectrogram = computeSpectrogram(analysisSignal, analysisRate, frameLength, hopLength);
 
           const selection = getSelectionBounds();
           const relativeSelectionStart = Math.max(0, selection.start - viewportStart);
@@ -2737,11 +2751,11 @@
           const selectionSignal = resampleLinear(
             extractSegment(selection.start, selection.end),
             state.inputSampleRate,
-            state.analysisRate,
+            analysisRate,
           );
           const analysisSlice = state.usePreemphasis ? applyPreemphasis(selectionSignal) : selectionSignal;
-          const spectrum = computeSpectrum(analysisSlice, state.analysisRate);
-          const mfcc = computeMfcc(analysisSlice, state.analysisRate, 40);
+          const spectrum = computeSpectrum(analysisSlice, analysisRate);
+          const mfcc = computeMfcc(analysisSlice, analysisRate, 40);
 
           drawWaveform(visibleRaw, envelope, envelopeRate);
           drawSpectrogram(spectrogram, selection.start, selection.end);
@@ -2749,7 +2763,7 @@
           drawMfcc(mfcc);
 
           elements.spectrumSubtitle.textContent =
-            `${Math.round(state.analysisRate / 1000)} kHz slice, ${Math.round(state.selectionWidthSec * 1000)} ms window centered at ${state.selectionCenterSec.toFixed(2)} s`;
+            `${state.analysisRate === "original" ? `original ${Math.round(analysisRate)} Hz` : `${Math.round(analysisRate / 1000)} kHz`} slice, ${Math.round(state.selectionWidthSec * 1000)} ms window centered at ${state.selectionCenterSec.toFixed(2)} s`;
           elements.mfccSubtitle.textContent =
             `40 coefficients for ${relativeSelectionStart.toFixed(2)}-${relativeSelectionEnd.toFixed(2)} s, CPP ${mfcc.cppDb.toFixed(2)} dB at ${mfcc.cppQuefrencyMs.toFixed(2)} ms`;
         } finally {
@@ -2774,7 +2788,7 @@
       elements.saveAudioButton.addEventListener("click", exportBufferedAudioAsWav);
       elements.screenshotButton.addEventListener("click", capturePageScreenshot);
       elements.analysisRateSelect.addEventListener("change", (event) => {
-        state.analysisRate = Number(event.target.value);
+        state.analysisRate = event.target.value;
         scheduleRender();
       });
       elements.playbackModeSelect.addEventListener("change", (event) => {
