@@ -43,7 +43,7 @@
         display: grid;
         grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr);
         gap: 14px;
-        align-items: start;
+        align-items: stretch;
         margin-bottom: 14px;
       }
 
@@ -76,25 +76,28 @@
       }
 
       .status-card {
-        padding: 18px;
+        display: flex;
+        align-items: center;
+        padding: 14px;
       }
 
       .status-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
-        margin-top: 12px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        width: 100%;
       }
 
       .metric {
-        padding: 10px 12px;
-        border-radius: 16px;
+        min-height: 58px;
+        padding: 8px 10px;
+        border-radius: 14px;
         background: rgba(255, 255, 255, 0.56);
       }
 
       .metric-label {
         display: block;
-        font-size: 0.76rem;
+        font-size: 0.68rem;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         color: var(--muted);
@@ -102,29 +105,29 @@
 
       .metric-value {
         display: block;
-        margin-top: 4px;
-        font-size: 0.98rem;
+        margin-top: 3px;
+        font-size: 0.9rem;
         font-weight: 600;
       }
 
       .metric-wide {
-        grid-column: 1 / -1;
+        grid-column: span 2;
       }
 
       .controls {
-        padding: 16px;
+        padding: 14px;
       }
 
       .sidebar-stack {
         display: grid;
-        gap: 16px;
+        gap: 10px;
         align-self: start;
       }
 
       .workspace {
         display: grid;
-        grid-template-columns: minmax(248px, 296px) minmax(0, 1fr);
-        gap: 16px;
+        grid-template-columns: minmax(214px, 252px) minmax(0, 1fr);
+        gap: 14px;
         align-items: start;
       }
 
@@ -136,19 +139,37 @@
       .control-grid {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 10px;
+        gap: 8px;
       }
 
       .control {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
       }
 
       .control label,
       .range-label,
       .toggle-label {
-        font-size: 0.85rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      .split-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .mini-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .mini-label {
+        font-size: 0.72rem;
         font-weight: 600;
         color: var(--muted);
       }
@@ -203,6 +224,7 @@
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 8px;
+        justify-items: start;
       }
 
       .action-row {
@@ -221,27 +243,42 @@
       }
 
       .transport-icon {
-        font-size: 1rem;
+        font-size: 1.2rem;
         line-height: 1;
       }
 
       .icon-only {
         gap: 0;
-        padding: 10px;
+        width: 54px;
+        min-width: 54px;
+        min-height: 54px;
+        padding: 0;
+        border-radius: 999px;
+        font-size: 0;
       }
 
       .icon-only .transport-icon {
-        font-size: 1.08rem;
+        font-size: 1.25rem;
+      }
+
+      .transport-record {
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+      }
+
+      .transport-record .transport-icon {
+        font-size: 1.35rem;
       }
 
       .toggle {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 11px 14px;
+        gap: 8px;
+        padding: 8px 10px;
         border-radius: 14px;
         background: rgba(255, 255, 255, 0.82);
         border: 1px solid rgba(52, 65, 74, 0.16);
+        font-size: 0.82rem;
+        line-height: 1.25;
       }
 
       .toggle input {
@@ -270,8 +307,8 @@
       .pan-row {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-        margin-top: 10px;
+        gap: 8px;
+        margin-top: 2px;
         align-items: center;
       }
 
@@ -328,9 +365,10 @@
       }
 
       .help {
-        padding: 16px 18px;
+        padding: 12px 14px;
         color: var(--muted);
-        line-height: 1.5;
+        line-height: 1.35;
+        font-size: 0.82rem;
       }
 
       .help strong {
@@ -420,7 +458,7 @@
                 <label>Transport</label>
                 <div class="transport-row">
                   <button
-                    class="primary transport-button icon-only"
+                    class="primary transport-button icon-only transport-record"
                     id="recordButton"
                     aria-label="Record"
                     title="Record"
@@ -457,11 +495,7 @@
                 </div>
               </div>
               <div class="control">
-                <label>Buffer</label>
-                <button class="secondary" id="clearButton">Clear history</button>
-              </div>
-              <div class="control">
-                <label>Reset app</label>
+                <label>Reset</label>
                 <button class="secondary" id="resetButton">Reset everything</button>
               </div>
               <div class="control">
@@ -487,22 +521,27 @@
                 <input id="panSlider" type="range" min="0" max="0" step="0.01" value="0" />
               </div>
               <div class="control">
-                <label for="analysisRateSelect">Analysis rate</label>
-                <select id="analysisRateSelect">
-                  <option value="8000">8 kHz</option>
-                  <option value="10000">10 kHz</option>
-                  <option value="16000" selected>16 kHz</option>
-                </select>
-              </div>
-              <div class="control">
-                <label for="viewDurationSelect">Viewport duration</label>
-                <select id="viewDurationSelect">
-                  <option value="2">2 s</option>
-                  <option value="4">4 s</option>
-                  <option value="6" selected>6 s</option>
-                  <option value="10">10 s</option>
-                  <option value="15">15 s</option>
-                </select>
+                <label>Analysis and view</label>
+                <div class="split-row">
+                  <div class="mini-field">
+                    <span class="mini-label">Rate</span>
+                    <select id="analysisRateSelect">
+                      <option value="8000">8 kHz</option>
+                      <option value="10000">10 kHz</option>
+                      <option value="16000" selected>16 kHz</option>
+                    </select>
+                  </div>
+                  <div class="mini-field">
+                    <span class="mini-label">View</span>
+                    <select id="viewDurationSelect">
+                      <option value="2">2 s</option>
+                      <option value="4">4 s</option>
+                      <option value="6" selected>6 s</option>
+                      <option value="10">10 s</option>
+                      <option value="15">15 s</option>
+                    </select>
+                  </div>
+                </div>
               </div>
               <div class="control">
                 <label class="range-label" for="windowWidthRange">Selection width</label>
@@ -512,24 +551,24 @@
                 </div>
               </div>
               <div class="control">
-                <label class="toggle-label">Optional preemphasis</label>
+                <label class="toggle-label">Processing</label>
                 <div class="toggle">
                   <input id="preemphasisToggle" type="checkbox" />
-                  <span>Apply first-order preemphasis before the spectrogram and MFCC</span>
+                  <span>Preemphasis</span>
                 </div>
               </div>
               <div class="control">
-                <label class="toggle-label">Viewport mode</label>
+                <label class="toggle-label">Viewport</label>
                 <div class="toggle">
                   <input id="followLiveToggle" type="checkbox" checked />
-                  <span>Keep the viewport pinned to the newest audio while capturing</span>
+                  <span>Follow live</span>
                 </div>
               </div>
               <div class="control">
-                <label class="toggle-label">Waveform amplitude</label>
+                <label class="toggle-label">Waveform</label>
                 <div class="toggle">
                   <input id="waveformAutoscaleToggle" type="checkbox" checked />
-                  <span>Autoscale the waveform and envelope to the current viewport</span>
+                  <span>Autoscale</span>
                 </div>
               </div>
             </div>
@@ -615,7 +654,6 @@
         playButton: document.getElementById("playButton"),
         pauseCaptureButton: document.getElementById("pauseCaptureButton"),
         stopButton: document.getElementById("stopButton"),
-        clearButton: document.getElementById("clearButton"),
         resetButton: document.getElementById("resetButton"),
         saveAudioButton: document.getElementById("saveAudioButton"),
         screenshotButton: document.getElementById("screenshotButton"),
@@ -2134,16 +2172,6 @@
         scheduleRender();
       }
 
-      function clearHistory() {
-        state.chunks = [];
-        state.totalSamples = 0;
-        state.viewportStartSec = 0;
-        state.selectionCenterSec = state.selectionWidthSec / 2;
-        updatePanSlider();
-        updateStatus();
-        scheduleRender();
-      }
-
       async function resetEverything() {
         state.dragState = null;
         await releaseCaptureResources();
@@ -2348,7 +2376,6 @@
       elements.playButton.addEventListener("click", resumeCapture);
       elements.pauseCaptureButton.addEventListener("click", pauseCapture);
       elements.stopButton.addEventListener("click", stopCapture);
-      elements.clearButton.addEventListener("click", clearHistory);
       elements.resetButton.addEventListener("click", resetEverything);
       elements.saveAudioButton.addEventListener("click", exportBufferedAudioAsWav);
       elements.screenshotButton.addEventListener("click", capturePageScreenshot);
