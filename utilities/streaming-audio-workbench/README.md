@@ -36,6 +36,7 @@ Use this checklist for every shipped update to the workbench:
 - [ ] Run `node --check` on the extracted inline script from the source HTML page
 - [ ] Copy the updated source page into `utilities/streaming-audio-workbench/streaming_audio_workbench.html`
 - [ ] If layout changed, capture a fresh Playwright screenshot to verify the packaged page
+- [ ] Check `git status --short`, remove or ignore junk files like `.DS_Store`, and make sure only intended files are staged
 - [ ] Commit and push the `utils` repo after the packaged copy is in sync
 
 ## Future agent prompt
@@ -44,6 +45,8 @@ Use this prompt when handing the utility to a future coding agent:
 
 ```text
 Continue work on the single-file browser utility at `utilities/streaming-audio-workbench/streaming_audio_workbench.html`.
+
+Before making or shipping any update, follow the Update Checklist in `utilities/streaming-audio-workbench/README.md` and treat it as required release procedure.
 
 This page is a distributable live microphone analysis workbench and should remain easy to ship as a standalone HTML file.
 
@@ -74,5 +77,6 @@ Working constraints:
 - keep the landscape-friendly left control sidebar layout
 - if behavior changes, update the lightweight contract test in `tests/test_streaming_audio_workbench_page.py` in the source project where this page originated
 - bump the calver on every shipped update using `yy.mm.dd-hhmmss`
+- check `git status --short` before commit/push and clean up junk files like `.DS_Store`
 - prefer concise inline documentation and avoid introducing unnecessary external dependencies
 ```

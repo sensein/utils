@@ -305,12 +305,36 @@
         font-size: 1.25rem;
       }
 
+      .icon-with-label {
+        width: 64px;
+        min-width: 64px;
+        min-height: 64px;
+        padding: 8px 6px 7px;
+        border-radius: 18px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+
+      .transport-label {
+        display: block;
+        font-size: 0.64rem;
+        line-height: 1;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
       .transport-record {
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
       }
 
       .transport-record .transport-icon {
         font-size: 1.35rem;
+      }
+
+      .transport-record .transport-label {
+        color: rgba(255, 247, 244, 0.96);
       }
 
       .toggle {
@@ -465,7 +489,7 @@
         <article class="panel hero-copy">
           <div class="hero-title-row">
             <h1>Streaming Audio Workbench</h1>
-            <span class="version-badge" id="versionLabel">26.04.16-105133</span>
+            <span class="version-badge" id="versionLabel">26.04.16-164306</span>
           </div>
           <p>
             Live microphone analysis with persistent history, waveform plus Hilbert-envelope
@@ -517,15 +541,16 @@
           <section class="panel controls">
             <div class="control-grid">
               <div class="control">
-                <label>Transport</label>
+                <label>Audio source</label>
                 <div class="transport-row">
                   <button
-                    class="primary transport-button icon-only transport-record"
+                    class="primary transport-button icon-with-label transport-record"
                     id="recordButton"
                     aria-label="Record"
                     title="Record"
                   >
                     <span class="transport-icon" aria-hidden="true">⏺</span>
+                    <span class="transport-label">Record</span>
                   </button>
                   <button
                     class="secondary transport-button icon-only"
@@ -555,28 +580,26 @@
                     <span class="transport-icon" aria-hidden="true">⏹</span>
                   </button>
                   <button
-                    class="secondary transport-button icon-only"
+                    class="secondary transport-button icon-with-label"
                     id="uploadAudioButton"
                     aria-label="Upload audio file"
                     title="Upload audio file"
                   >
                     <span class="transport-icon" aria-hidden="true">⤴</span>
+                    <span class="transport-label">Upload</span>
                   </button>
                 </div>
                 <input id="uploadAudioInput" type="file" accept="audio/*" hidden />
               </div>
               <div class="control">
-                <label>Playback</label>
+                <label for="playbackModeSelect">Playback source</label>
                 <div class="playback-row">
-                  <div class="mini-field">
-                    <span class="mini-label">Source</span>
-                    <select id="playbackModeSelect">
-                      <option value="start">Start</option>
-                      <option value="selection">Selection</option>
-                      <option value="window">Window</option>
-                      <option value="cursor">Cursor</option>
-                    </select>
-                  </div>
+                  <select id="playbackModeSelect">
+                    <option value="start">Start</option>
+                    <option value="selection">Selection</option>
+                    <option value="window">Window</option>
+                    <option value="cursor">Cursor</option>
+                  </select>
                   <div class="playback-actions">
                     <button
                       class="secondary transport-button icon-only"
@@ -736,7 +759,7 @@
     </main>
 
     <script>
-      const buildVersion = "26.04.16-105133";
+      const buildVersion = "26.04.16-164306";
 
       const state = {
         audioContext: null,
