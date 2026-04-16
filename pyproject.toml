@@ -1,0 +1,11 @@
+[project]
+name = "sensein-utils"
+version = "0.1.0"
+description = "Small browser and analysis utilities for SenseIn."
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "pytest>=9.0",
+]

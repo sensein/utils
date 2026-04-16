@@ -1,0 +1,5 @@
+{
+  "title": "Streaming Audio Workbench",
+  "summary": "Live microphone analysis with waveform, Hilbert envelope, spectrogram, spectrum, MFCC, CPP, export actions, and environment metadata.",
+  "live_page": "streaming_audio_workbench.html"
+}

@@ -1,0 +1,2278 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Streaming Audio Workbench</title>
+    <style>
+      :root {
+        --bg-top: #f4efe4;
+        --bg-bottom: #dfe9ec;
+        --panel: rgba(255, 252, 246, 0.84);
+        --panel-border: rgba(58, 71, 80, 0.18);
+        --text: #162026;
+        --muted: #55626b;
+        --accent: #b3472d;
+        --accent-soft: rgba(179, 71, 45, 0.14);
+        --accent-strong: rgba(179, 71, 45, 0.78);
+        --teal: #1d6b72;
+        --shadow: 0 18px 42px rgba(40, 53, 61, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(255, 255, 255, 0.65), transparent 32%),
+          linear-gradient(160deg, var(--bg-top), var(--bg-bottom));
+      }
+
+      .page {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 32px 20px 44px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+        gap: 18px;
+        align-items: start;
+        margin-bottom: 20px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(10px);
+      }
+
+      .hero-copy {
+        padding: 24px 26px 18px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(2rem, 3vw, 3rem);
+        font-weight: 600;
+        line-height: 1.05;
+        letter-spacing: -0.03em;
+      }
+
+      .hero-copy p {
+        margin: 0;
+        max-width: 62ch;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .status-card {
+        padding: 22px;
+      }
+
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .metric {
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.56);
+      }
+
+      .metric-label {
+        display: block;
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .metric-value {
+        display: block;
+        margin-top: 4px;
+        font-size: 1.05rem;
+        font-weight: 600;
+      }
+
+      .controls {
+        padding: 18px;
+      }
+
+      .sidebar-stack {
+        display: grid;
+        gap: 16px;
+        align-self: start;
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(270px, 320px) minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .workspace .sidebar-stack {
+        position: sticky;
+        top: 20px;
+      }
+
+      .control-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .control {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .control label,
+      .range-label,
+      .toggle-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      button,
+      select,
+      input[type="range"] {
+        width: 100%;
+      }
+
+      button,
+      select {
+        border: 1px solid rgba(52, 65, 74, 0.16);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--text);
+        font: inherit;
+      }
+
+      button {
+        padding: 11px 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 18px rgba(34, 47, 56, 0.1);
+      }
+
+      button:disabled {
+        cursor: default;
+        opacity: 0.55;
+      }
+
+      .primary {
+        background: linear-gradient(135deg, #be5736, #9d3920);
+        color: #fff7f4;
+        border-color: rgba(137, 49, 27, 0.2);
+      }
+
+      .secondary {
+        background: rgba(255, 255, 255, 0.74);
+      }
+
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid rgba(52, 65, 74, 0.16);
+      }
+
+      .toggle input {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--accent);
+      }
+
+      .range-with-output {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .range-output {
+        min-width: 4.5rem;
+        padding: 6px 8px;
+        border-radius: 12px;
+        text-align: center;
+        font-size: 0.88rem;
+        font-variant-numeric: tabular-nums;
+        background: rgba(255, 255, 255, 0.66);
+      }
+
+      .pan-row {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, 1fr);
+        gap: 10px;
+        margin-top: 14px;
+        align-items: center;
+      }
+
+      .plots {
+        display: grid;
+        gap: 16px;
+      }
+
+      .plot-span-2 {
+        grid-column: 1 / -1;
+      }
+
+      .plot-card {
+        padding: 14px 14px 12px;
+      }
+
+      .plot-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: baseline;
+        margin: 0 2px 10px;
+      }
+
+      .plot-title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+      }
+
+      .plot-subtitle {
+        color: var(--muted);
+        font-size: 0.87rem;
+      }
+
+      canvas {
+        width: 100%;
+        display: block;
+        border-radius: 18px;
+        background:
+          linear-gradient(180deg, rgba(17, 27, 34, 0.98), rgba(15, 22, 28, 0.95)),
+          linear-gradient(135deg, rgba(29, 107, 114, 0.18), rgba(179, 71, 45, 0.14));
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .bottom-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .help {
+        margin-top: 18px;
+        padding: 16px 18px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .help strong {
+        color: var(--text);
+      }
+
+      @media (max-width: 980px) {
+        .hero,
+        .workspace,
+        .bottom-row {
+          grid-template-columns: 1fr;
+        }
+
+        .workspace .sidebar-stack {
+          position: static;
+        }
+
+        .pan-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <article class="panel hero-copy">
+          <h1>Streaming Audio Workbench</h1>
+          <p>
+            Live microphone analysis with persistent history, waveform plus Hilbert-envelope
+            overlay, a synced spectrogram window, and focused spectrum and MFCC views for the
+            selected slice. Drag the highlighted window in the waveform to move it, or drag its
+            edges to change width.
+          </p>
+        </article>
+        <aside class="panel status-card">
+          <div class="status-grid">
+            <div class="metric">
+              <span class="metric-label">Capture</span>
+              <span class="metric-value" id="statusLabel">Idle</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Buffered Audio</span>
+              <span class="metric-value" id="bufferDurationLabel">0.00 s</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Input Rate</span>
+              <span class="metric-value" id="inputRateLabel">-</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Selection</span>
+              <span class="metric-value" id="selectionLabel">0.00-0.03 s</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Browser</span>
+              <span class="metric-value" id="browserLabel">Detecting...</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">OS</span>
+              <span class="metric-value" id="osLabel">Detecting...</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Microphone</span>
+              <span class="metric-value" id="microphoneLabel">Not connected</span>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="workspace">
+        <aside class="sidebar-stack">
+          <section class="panel controls">
+            <div class="control-grid">
+              <div class="control">
+                <label>Capture</label>
+                <button class="primary" id="startButton">Start microphone</button>
+              </div>
+              <div class="control">
+                <label>Pause / Resume</label>
+                <button class="secondary" id="pauseButton" disabled>Pause capture</button>
+              </div>
+              <div class="control">
+                <label>Buffer</label>
+                <button class="secondary" id="clearButton">Clear history</button>
+              </div>
+              <div class="control">
+                <label>Reset app</label>
+                <button class="secondary" id="resetButton">Reset everything</button>
+              </div>
+              <div class="control">
+                <label>Save audio</label>
+                <button class="secondary" id="saveAudioButton">Download WAV</button>
+              </div>
+              <div class="control">
+                <label>Capture page</label>
+                <button class="secondary" id="screenshotButton">Save PNG snapshot</button>
+              </div>
+              <div class="pan-row">
+                <button class="secondary" id="panLeftButton">Pan left</button>
+                <button class="secondary" id="panRightButton">Pan right</button>
+                <input id="panSlider" type="range" min="0" max="0" step="0.01" value="0" />
+              </div>
+              <div class="control">
+                <label for="analysisRateSelect">Analysis rate</label>
+                <select id="analysisRateSelect">
+                  <option value="8000">8 kHz</option>
+                  <option value="10000">10 kHz</option>
+                  <option value="16000" selected>16 kHz</option>
+                </select>
+              </div>
+              <div class="control">
+                <label for="viewDurationSelect">Viewport duration</label>
+                <select id="viewDurationSelect">
+                  <option value="2">2 s</option>
+                  <option value="4">4 s</option>
+                  <option value="6" selected>6 s</option>
+                  <option value="10">10 s</option>
+                  <option value="15">15 s</option>
+                </select>
+              </div>
+              <div class="control">
+                <label class="range-label" for="windowWidthRange">Selection width</label>
+                <div class="range-with-output">
+                  <input id="windowWidthRange" type="range" min="15" max="120" step="1" value="30" />
+                  <output class="range-output" id="windowWidthOutput">30 ms</output>
+                </div>
+              </div>
+              <div class="control">
+                <label class="toggle-label">Optional preemphasis</label>
+                <div class="toggle">
+                  <input id="preemphasisToggle" type="checkbox" />
+                  <span>Apply first-order preemphasis before the spectrogram and MFCC</span>
+                </div>
+              </div>
+              <div class="control">
+                <label class="toggle-label">Viewport mode</label>
+                <div class="toggle">
+                  <input id="followLiveToggle" type="checkbox" checked />
+                  <span>Keep the viewport pinned to the newest audio while capturing</span>
+                </div>
+              </div>
+              <div class="control">
+                <label class="toggle-label">Waveform amplitude</label>
+                <div class="toggle">
+                  <input id="waveformAutoscaleToggle" type="checkbox" checked />
+                  <span>Autoscale the waveform and envelope to the current viewport</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel help">
+            <strong>Notes:</strong> microphone capture requires permission and may need a secure
+            context such as <code>http://localhost</code>. The waveform keeps the full buffered
+            history in memory so you can pause, pan backward, and revisit older slices without
+            losing the stream.
+          </section>
+        </aside>
+
+        <section class="plots">
+          <article class="panel plot-card plot-span-2">
+            <div class="plot-head">
+              <h2 class="plot-title">Waveform + Hilbert Envelope</h2>
+              <span class="plot-subtitle" id="waveformSubtitle">No audio buffered yet</span>
+            </div>
+            <canvas id="waveformCanvas" width="1320" height="260"></canvas>
+          </article>
+
+          <article class="panel plot-card plot-span-2">
+            <div class="plot-head">
+              <h2 class="plot-title">Spectrogram</h2>
+              <span class="plot-subtitle" id="spectrogramSubtitle">Fixed STFT window with synced selection overlay</span>
+            </div>
+            <canvas id="spectrogramCanvas" width="1320" height="340"></canvas>
+          </article>
+
+          <div class="bottom-row">
+            <article class="panel plot-card">
+              <div class="plot-head">
+                <h2 class="plot-title">Selected Spectrum Slice</h2>
+                <span class="plot-subtitle" id="spectrumSubtitle">Move the synced window to inspect a frame</span>
+              </div>
+              <canvas id="spectrumCanvas" width="640" height="240"></canvas>
+            </article>
+
+            <article class="panel plot-card">
+              <div class="plot-head">
+                <h2 class="plot-title">MFCC / CPP View</h2>
+                <span class="plot-subtitle" id="mfccSubtitle">Extended cepstral range from the active slice</span>
+              </div>
+              <canvas id="mfccCanvas" width="640" height="240"></canvas>
+            </article>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        audioContext: null,
+        mediaStream: null,
+        sourceNode: null,
+        captureNode: null,
+        usingWorklet: false,
+        isStarted: false,
+        isPaused: false,
+        inputSampleRate: 0,
+        chunks: [],
+        totalSamples: 0,
+        analysisRate: 16000,
+        viewDurationSec: 6.0,
+        viewportStartSec: 0.0,
+        selectionCenterSec: 0.5,
+        selectionWidthSec: 0.03,
+        spectrogramFrameSec: 0.02,
+        spectrogramHopSec: 0.005,
+        hilbertEnvelopeCutoffHz: 50,
+        followLive: true,
+        usePreemphasis: false,
+        waveformAutoScale: true,
+        renderScheduled: false,
+        isRendering: false,
+        needsAnotherRender: false,
+        dragState: null,
+      };
+
+      const elements = {
+        startButton: document.getElementById("startButton"),
+        pauseButton: document.getElementById("pauseButton"),
+        clearButton: document.getElementById("clearButton"),
+        resetButton: document.getElementById("resetButton"),
+        saveAudioButton: document.getElementById("saveAudioButton"),
+        screenshotButton: document.getElementById("screenshotButton"),
+        analysisRateSelect: document.getElementById("analysisRateSelect"),
+        preemphasisToggle: document.getElementById("preemphasisToggle"),
+        followLiveToggle: document.getElementById("followLiveToggle"),
+        waveformAutoscaleToggle: document.getElementById("waveformAutoscaleToggle"),
+        viewDurationSelect: document.getElementById("viewDurationSelect"),
+        windowWidthRange: document.getElementById("windowWidthRange"),
+        windowWidthOutput: document.getElementById("windowWidthOutput"),
+        panLeftButton: document.getElementById("panLeftButton"),
+        panRightButton: document.getElementById("panRightButton"),
+        panSlider: document.getElementById("panSlider"),
+        waveformCanvas: document.getElementById("waveformCanvas"),
+        spectrogramCanvas: document.getElementById("spectrogramCanvas"),
+        spectrumCanvas: document.getElementById("spectrumCanvas"),
+        mfccCanvas: document.getElementById("mfccCanvas"),
+        statusLabel: document.getElementById("statusLabel"),
+        bufferDurationLabel: document.getElementById("bufferDurationLabel"),
+        inputRateLabel: document.getElementById("inputRateLabel"),
+        selectionLabel: document.getElementById("selectionLabel"),
+        browserLabel: document.getElementById("browserLabel"),
+        osLabel: document.getElementById("osLabel"),
+        microphoneLabel: document.getElementById("microphoneLabel"),
+        waveformSubtitle: document.getElementById("waveformSubtitle"),
+        spectrogramSubtitle: document.getElementById("spectrogramSubtitle"),
+        spectrumSubtitle: document.getElementById("spectrumSubtitle"),
+        mfccSubtitle: document.getElementById("mfccSubtitle"),
+      };
+
+      const paletteStops = [
+        [0.0, [6, 12, 28]],
+        [0.2, [16, 44, 81]],
+        [0.42, [27, 102, 117]],
+        [0.66, [223, 146, 65]],
+        [0.84, [238, 208, 137]],
+        [1.0, [255, 244, 224]],
+      ];
+
+      function clamp(value, min, max) {
+        return Math.min(Math.max(value, min), max);
+      }
+
+      function nextPowerOfTwo(value) {
+        let power = 1;
+        while (power < value) {
+          power <<= 1;
+        }
+        return power;
+      }
+
+      function parseBrowserInfo() {
+        const userAgent = navigator.userAgent || "";
+        const uaData = navigator.userAgentData;
+        if (uaData && Array.isArray(uaData.brands) && uaData.brands.length) {
+          const preferredBrand =
+            uaData.brands.find((brand) => !/Not/i.test(brand.brand)) || uaData.brands[0];
+          const version = preferredBrand.version ? ` ${preferredBrand.version}` : "";
+          return `${preferredBrand.brand}${version}`.trim();
+        }
+        if (/Edg\//.test(userAgent)) {
+          return `Microsoft Edge ${userAgent.match(/Edg\/([\d.]+)/)?.[1] || ""}`.trim();
+        }
+        if (/Chrome\//.test(userAgent) && !/Edg\//.test(userAgent)) {
+          return `Chrome ${userAgent.match(/Chrome\/([\d.]+)/)?.[1] || ""}`.trim();
+        }
+        if (/Firefox\//.test(userAgent)) {
+          return `Firefox ${userAgent.match(/Firefox\/([\d.]+)/)?.[1] || ""}`.trim();
+        }
+        if (/Safari\//.test(userAgent) && /Version\//.test(userAgent) && !/Chrome\//.test(userAgent)) {
+          return `Safari ${userAgent.match(/Version\/([\d.]+)/)?.[1] || ""}`.trim();
+        }
+        return "Unknown browser";
+      }
+
+      function parseOsInfo() {
+        const userAgent = navigator.userAgent || "";
+        const platform = navigator.userAgentData?.platform || navigator.platform || "";
+        if (/Windows/i.test(platform) || /Windows/i.test(userAgent)) {
+          return "Windows";
+        }
+        if (/Mac/i.test(platform) || /Mac OS X/i.test(userAgent)) {
+          return "macOS";
+        }
+        if (/Android/i.test(platform) || /Android/i.test(userAgent)) {
+          return "Android";
+        }
+        if (/iPhone|iPad|iPod/i.test(userAgent)) {
+          return "iOS";
+        }
+        if (/Linux/i.test(platform) || /Linux/i.test(userAgent)) {
+          return "Linux";
+        }
+        return platform || "Unknown OS";
+      }
+
+      function updateEnvironmentInfo() {
+        elements.browserLabel.textContent = parseBrowserInfo();
+        elements.osLabel.textContent = parseOsInfo();
+      }
+
+      function refreshMicrophoneLabel() {
+        let label = "Not connected";
+        const track = state.mediaStream?.getAudioTracks?.()[0];
+        if (track) {
+          label = track.label || "Connected microphone";
+          const settings = typeof track.getSettings === "function" ? track.getSettings() : {};
+          if (!track.label && settings.deviceId) {
+            label = `Device ${settings.deviceId}`;
+          }
+        }
+        elements.microphoneLabel.textContent = label;
+      }
+
+      function totalDurationSec() {
+        if (!state.inputSampleRate) {
+          return 0.0;
+        }
+        return state.totalSamples / state.inputSampleRate;
+      }
+
+      function getViewportBounds() {
+        const totalDuration = totalDurationSec();
+        const start = clamp(state.viewportStartSec, 0, Math.max(0, totalDuration - state.viewDurationSec));
+        const end = Math.min(totalDuration, start + state.viewDurationSec);
+        return {
+          start,
+          end,
+          duration: Math.max(1e-6, end - start),
+        };
+      }
+
+      function updateStatus() {
+        const totalDuration = totalDurationSec();
+        elements.bufferDurationLabel.textContent = `${totalDuration.toFixed(2)} s`;
+        elements.inputRateLabel.textContent = state.inputSampleRate
+          ? `${Math.round(state.inputSampleRate)} Hz`
+          : "-";
+        const selectionStart = Math.max(0, state.selectionCenterSec - state.selectionWidthSec / 2);
+        const selectionEnd = selectionStart + state.selectionWidthSec;
+        elements.selectionLabel.textContent = `${selectionStart.toFixed(2)}-${selectionEnd.toFixed(2)} s`;
+
+        if (!state.isStarted) {
+          elements.statusLabel.textContent = "Idle";
+        } else if (state.isPaused) {
+          elements.statusLabel.textContent = "Paused";
+        } else {
+          elements.statusLabel.textContent = "Recording";
+        }
+      }
+
+      function updateWindowWidthOutput() {
+        elements.windowWidthOutput.textContent = `${Math.round(state.selectionWidthSec * 1000)} ms`;
+      }
+
+      function syncControlsToState() {
+        elements.analysisRateSelect.value = String(state.analysisRate);
+        elements.viewDurationSelect.value = String(state.viewDurationSec);
+        elements.windowWidthRange.value = String(Math.round(state.selectionWidthSec * 1000));
+        elements.preemphasisToggle.checked = state.usePreemphasis;
+        elements.followLiveToggle.checked = state.followLive;
+        elements.waveformAutoscaleToggle.checked = state.waveformAutoScale;
+        updateWindowWidthOutput();
+      }
+
+      function syncSelectionToViewport() {
+        const totalDuration = totalDurationSec();
+        if (totalDuration <= 0) {
+          state.viewportStartSec = 0.0;
+          state.selectionCenterSec = state.selectionWidthSec / 2;
+          return;
+        }
+
+        const viewportMaxStart = Math.max(0, totalDuration - state.viewDurationSec);
+        state.viewportStartSec = clamp(state.viewportStartSec, 0, viewportMaxStart);
+        const viewportEnd = Math.min(totalDuration, state.viewportStartSec + state.viewDurationSec);
+        const minCenter = state.viewportStartSec + state.selectionWidthSec / 2;
+        const maxCenter = Math.max(minCenter, viewportEnd - state.selectionWidthSec / 2);
+        state.selectionCenterSec = clamp(state.selectionCenterSec, minCenter, maxCenter);
+      }
+
+      function updatePanSlider() {
+        const maxStart = Math.max(0, totalDurationSec() - state.viewDurationSec);
+        elements.panSlider.max = maxStart.toFixed(3);
+        elements.panSlider.value = clamp(state.viewportStartSec, 0, maxStart).toFixed(3);
+      }
+
+      function setFollowLive(enabled) {
+        state.followLive = enabled;
+        elements.followLiveToggle.checked = enabled;
+        if (enabled) {
+          const totalDuration = totalDurationSec();
+          state.viewportStartSec = Math.max(0, totalDuration - state.viewDurationSec);
+          syncSelectionToViewport();
+        }
+        updatePanSlider();
+        scheduleRender();
+      }
+
+      function describeViewport() {
+        const viewport = getViewportBounds();
+        elements.waveformSubtitle.textContent =
+          `Viewport ${viewport.start.toFixed(2)}-${viewport.end.toFixed(2)} s with |x + jH{x}| low-passed at ${state.hilbertEnvelopeCutoffHz} Hz${state.waveformAutoScale ? ", autoscaled" : ", fixed +/-1 scale"}`;
+        elements.spectrogramSubtitle.textContent =
+          `${state.analysisRate / 1000} kHz analysis, ${Math.round(state.spectrogramFrameSec * 1000)} ms frame, ${Math.round(state.spectrogramHopSec * 1000)} ms hop${state.usePreemphasis ? ", preemphasis on" : ""}`;
+      }
+
+      function scheduleRender() {
+        if (state.isRendering) {
+          state.needsAnotherRender = true;
+          return;
+        }
+        if (state.renderScheduled) {
+          return;
+        }
+        state.renderScheduled = true;
+        requestAnimationFrame(() => {
+          state.renderScheduled = false;
+          renderAll();
+        });
+      }
+
+      function paintCanvasMessage(canvas, title, detail) {
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, "#101820");
+        gradient.addColorStop(1, "#0f1f24");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(255, 245, 230, 0.92)";
+        ctx.font = '600 20px "Avenir Next", "Segoe UI", sans-serif';
+        ctx.fillText(title, 28, 42);
+        ctx.fillStyle = "rgba(227, 229, 230, 0.76)";
+        ctx.font = '15px "Avenir Next", "Segoe UI", sans-serif';
+        ctx.fillText(detail, 28, 68);
+      }
+
+      function getSelectionBounds() {
+        return {
+          start: state.selectionCenterSec - state.selectionWidthSec / 2,
+          end: state.selectionCenterSec + state.selectionWidthSec / 2,
+        };
+      }
+
+      function extractSamples(startSample, endSample) {
+        const safeStart = Math.max(0, startSample);
+        const safeEnd = Math.max(safeStart, Math.min(endSample, state.totalSamples));
+        const length = Math.max(0, safeEnd - safeStart);
+        const output = new Float32Array(length);
+        if (!length) {
+          return output;
+        }
+
+        let writeOffset = 0;
+        let cursor = 0;
+        for (const chunk of state.chunks) {
+          const chunkStart = cursor;
+          const chunkEnd = cursor + chunk.length;
+          if (chunkEnd <= safeStart) {
+            cursor = chunkEnd;
+            continue;
+          }
+          if (chunkStart >= safeEnd) {
+            break;
+          }
+          const localStart = Math.max(0, safeStart - chunkStart);
+          const localEnd = Math.min(chunk.length, safeEnd - chunkStart);
+          output.set(chunk.subarray(localStart, localEnd), writeOffset);
+          writeOffset += localEnd - localStart;
+          cursor = chunkEnd;
+        }
+        return output;
+      }
+
+      function extractSegment(startSec, endSec) {
+        if (!state.inputSampleRate) {
+          return new Float32Array(0);
+        }
+        const startSample = Math.floor(startSec * state.inputSampleRate);
+        const endSample = Math.ceil(endSec * state.inputSampleRate);
+        return extractSamples(startSample, endSample);
+      }
+
+      function makeTimestampLabel() {
+        return new Date().toISOString().replace(/[:.]/g, "-");
+      }
+
+      function triggerDownload(url, filename) {
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+
+      async function saveBlob(blob, filename, mimeType = blob.type || "application/octet-stream") {
+        if (window.showSaveFilePicker) {
+          try {
+            const handle = await window.showSaveFilePicker({
+              suggestedName: filename,
+              types: [
+                {
+                  description: mimeType,
+                  accept: {
+                    [mimeType]: [`.${filename.split(".").pop()}`],
+                  },
+                },
+              ],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return;
+          } catch (error) {
+            if (error && error.name === "AbortError") {
+              return;
+            }
+            console.warn("File picker save failed; falling back to browser download.", error);
+          }
+        }
+
+        const url = URL.createObjectURL(blob);
+        triggerDownload(url, filename);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      function canvasToPngBlob(canvas) {
+        return new Promise((resolve, reject) => {
+          try {
+            canvas.toBlob((blobResult) => {
+              if (blobResult) {
+                resolve(blobResult);
+              } else {
+                reject(new Error("The browser could not encode the image as PNG."));
+              }
+            }, "image/png");
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }
+
+      function encodeWav(samples, sampleRate) {
+        const bytesPerSample = 2;
+        const dataSize = samples.length * bytesPerSample;
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+
+        function writeString(offset, text) {
+          for (let i = 0; i < text.length; i += 1) {
+            view.setUint8(offset + i, text.charCodeAt(i));
+          }
+        }
+
+        writeString(0, "RIFF");
+        view.setUint32(4, 36 + dataSize, true);
+        writeString(8, "WAVE");
+        writeString(12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * bytesPerSample, true);
+        view.setUint16(32, bytesPerSample, true);
+        view.setUint16(34, 8 * bytesPerSample, true);
+        writeString(36, "data");
+        view.setUint32(40, dataSize, true);
+
+        let offset = 44;
+        for (let i = 0; i < samples.length; i += 1) {
+          const clamped = clamp(samples[i], -1, 1);
+          const pcm = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+          view.setInt16(offset, Math.round(pcm), true);
+          offset += 2;
+        }
+        return new Blob([buffer], { type: "audio/wav" });
+      }
+
+      function exportBufferedAudioAsWav() {
+        if (!state.totalSamples || !state.inputSampleRate) {
+          alert("There is no buffered audio to save yet.");
+          return;
+        }
+        const samples = extractSamples(0, state.totalSamples);
+        const wavBlob = encodeWav(samples, Math.round(state.inputSampleRate));
+        saveBlob(wavBlob, `streaming-audio-${makeTimestampLabel()}.wav`, "audio/wav");
+      }
+
+      async function captureScreenshotViaDisplayMedia() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+          throw new Error("Display capture is not available in this browser.");
+        }
+
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            preferCurrentTab: true,
+          },
+          audio: false,
+        });
+
+        try {
+          const [track] = stream.getVideoTracks();
+          if (!track) {
+            throw new Error("No video track was returned from display capture.");
+          }
+
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+
+          if (window.ImageCapture) {
+            const imageCapture = new ImageCapture(track);
+            const bitmap = await imageCapture.grabFrame();
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            ctx.drawImage(bitmap, 0, 0);
+          } else {
+            const video = document.createElement("video");
+            video.srcObject = stream;
+            video.muted = true;
+            video.playsInline = true;
+            await video.play();
+            await new Promise((resolve) => {
+              if (video.readyState >= 2) {
+                resolve();
+              } else {
+                video.onloadeddata = () => resolve();
+              }
+            });
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            video.pause();
+            video.srcObject = null;
+          }
+
+          const pngBlob = await canvasToPngBlob(canvas);
+          await saveBlob(
+            pngBlob,
+            `streaming-audio-workbench-${makeTimestampLabel()}.png`,
+            "image/png",
+          );
+        } finally {
+          for (const track of stream.getTracks()) {
+            track.stop();
+          }
+        }
+      }
+
+      async function capturePageScreenshot() {
+        const target = document.querySelector(".page");
+        if (!target) {
+          alert("The page container could not be found for screenshot export.");
+          return;
+        }
+
+        const clonedTarget = target.cloneNode(true);
+        const originalCanvases = target.querySelectorAll("canvas");
+        const clonedCanvases = clonedTarget.querySelectorAll("canvas");
+        originalCanvases.forEach((canvas, index) => {
+          const replacement = document.createElement("img");
+          replacement.src = canvas.toDataURL("image/png");
+          replacement.width = canvas.width;
+          replacement.height = canvas.height;
+          replacement.style.width = `${canvas.clientWidth || canvas.width}px`;
+          replacement.style.height = `${canvas.clientHeight || canvas.height}px`;
+          replacement.style.display = "block";
+          replacement.style.borderRadius = getComputedStyle(canvas).borderRadius;
+          replacement.style.border = getComputedStyle(canvas).border;
+          replacement.style.background = getComputedStyle(canvas).background;
+          clonedCanvases[index].replaceWith(replacement);
+        });
+
+        const styleText = Array.from(document.querySelectorAll("style"))
+          .map((node) => node.textContent || "")
+          .join("\n");
+
+        const rect = target.getBoundingClientRect();
+        const width = Math.ceil(rect.width);
+        const height = Math.ceil(rect.height);
+        const serializedMarkup = new XMLSerializer().serializeToString(clonedTarget);
+        const svg = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+            <foreignObject width="100%" height="100%">
+              <div xmlns="http://www.w3.org/1999/xhtml">
+                <style>${styleText}</style>
+                ${serializedMarkup}
+              </div>
+            </foreignObject>
+          </svg>
+        `;
+
+        const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+
+        try {
+          const image = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error("The browser could not render the page snapshot."));
+            img.src = url;
+          });
+
+          const canvas = document.createElement("canvas");
+          const deviceScale = Math.max(1, window.devicePixelRatio || 1);
+          canvas.width = Math.round(width * deviceScale);
+          canvas.height = Math.round(height * deviceScale);
+          const ctx = canvas.getContext("2d");
+          ctx.scale(deviceScale, deviceScale);
+          ctx.fillStyle = getComputedStyle(document.body).backgroundColor || "#ffffff";
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(image, 0, 0, width, height);
+
+          const pngBlob = await canvasToPngBlob(canvas);
+          await saveBlob(
+            pngBlob,
+            `streaming-audio-workbench-${makeTimestampLabel()}.png`,
+            "image/png",
+          );
+        } catch (error) {
+          console.warn("DOM snapshot failed; falling back to display capture.", error);
+          try {
+            await captureScreenshotViaDisplayMedia();
+          } catch (fallbackError) {
+            console.error(fallbackError);
+            alert(`Screenshot export failed: ${fallbackError.message}`);
+          }
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+
+      function lowpassOnePole(signal, sampleRate, cutoffHz) {
+        if (!signal.length) {
+          return new Float32Array(0);
+        }
+        const output = new Float32Array(signal.length);
+        const rc = 1 / (2 * Math.PI * Math.max(1, cutoffHz));
+        const dt = 1 / sampleRate;
+        const alpha = dt / (rc + dt);
+        output[0] = signal[0];
+        for (let i = 1; i < signal.length; i += 1) {
+          output[i] = output[i - 1] + alpha * (signal[i] - output[i - 1]);
+        }
+        return output;
+      }
+
+      function resampleLinear(signal, fromRate, toRate) {
+        if (!signal.length || fromRate === toRate) {
+          return signal.slice();
+        }
+        const filtered = toRate < fromRate ? lowpassOnePole(signal, fromRate, toRate * 0.45) : signal;
+        const outLength = Math.max(1, Math.round(filtered.length * toRate / fromRate));
+        const output = new Float32Array(outLength);
+        const scale = fromRate / toRate;
+        for (let i = 0; i < outLength; i += 1) {
+          const sourceIndex = i * scale;
+          const base = Math.floor(sourceIndex);
+          const frac = sourceIndex - base;
+          const s0 = filtered[Math.min(base, filtered.length - 1)];
+          const s1 = filtered[Math.min(base + 1, filtered.length - 1)];
+          output[i] = s0 + frac * (s1 - s0);
+        }
+        return output;
+      }
+
+      function applyPreemphasis(signal, coefficient = 0.97) {
+        const emphasized = new Float32Array(signal.length);
+        if (!signal.length) {
+          return emphasized;
+        }
+        emphasized[0] = signal[0];
+        for (let i = 1; i < signal.length; i += 1) {
+          emphasized[i] = signal[i] - coefficient * signal[i - 1];
+        }
+        return emphasized;
+      }
+
+      function fft(re, im, inverse = false) {
+        const n = re.length;
+        let j = 0;
+        for (let i = 0; i < n; i += 1) {
+          if (i < j) {
+            [re[i], re[j]] = [re[j], re[i]];
+            [im[i], im[j]] = [im[j], im[i]];
+          }
+          let bit = n >> 1;
+          while (bit > 0 && j >= bit) {
+            j -= bit;
+            bit >>= 1;
+          }
+          j += bit;
+        }
+
+        for (let size = 2; size <= n; size <<= 1) {
+          const halfSize = size >> 1;
+          const theta = ((inverse ? 2 : -2) * Math.PI) / size;
+          const stepRe = Math.cos(theta);
+          const stepIm = Math.sin(theta);
+          for (let start = 0; start < n; start += size) {
+            let twiddleRe = 1.0;
+            let twiddleIm = 0.0;
+            for (let offset = 0; offset < halfSize; offset += 1) {
+              const evenIndex = start + offset;
+              const oddIndex = evenIndex + halfSize;
+
+              const tempRe = twiddleRe * re[oddIndex] - twiddleIm * im[oddIndex];
+              const tempIm = twiddleRe * im[oddIndex] + twiddleIm * re[oddIndex];
+
+              re[oddIndex] = re[evenIndex] - tempRe;
+              im[oddIndex] = im[evenIndex] - tempIm;
+              re[evenIndex] += tempRe;
+              im[evenIndex] += tempIm;
+
+              const nextRe = twiddleRe * stepRe - twiddleIm * stepIm;
+              const nextIm = twiddleRe * stepIm + twiddleIm * stepRe;
+              twiddleRe = nextRe;
+              twiddleIm = nextIm;
+            }
+          }
+        }
+
+        if (inverse) {
+          for (let i = 0; i < n; i += 1) {
+            re[i] /= n;
+            im[i] /= n;
+          }
+        }
+      }
+
+      function computeHilbertEnvelope(signal, sampleRate, cutoffHz = 50) {
+        if (!signal.length) {
+          return new Float32Array(0);
+        }
+
+        const n = nextPowerOfTwo(signal.length);
+        const re = new Float32Array(n);
+        const im = new Float32Array(n);
+        re.set(signal);
+        fft(re, im, false);
+
+        for (let k = 1; k < n / 2; k += 1) {
+          re[k] *= 2;
+          im[k] *= 2;
+        }
+        for (let k = Math.floor(n / 2) + 1; k < n; k += 1) {
+          re[k] = 0;
+          im[k] = 0;
+        }
+
+        fft(re, im, true);
+        const envelope = new Float32Array(signal.length);
+        for (let i = 0; i < signal.length; i += 1) {
+          envelope[i] = Math.hypot(re[i], im[i]);
+        }
+        return lowpassOnePole(envelope, sampleRate, cutoffHz);
+      }
+
+      function hammingWindow(length) {
+        const window = new Float32Array(length);
+        if (length === 1) {
+          window[0] = 1;
+          return window;
+        }
+        for (let i = 0; i < length; i += 1) {
+          window[i] = 0.54 - 0.46 * Math.cos((2 * Math.PI * i) / (length - 1));
+        }
+        return window;
+      }
+
+      function computeSpectrum(signal, sampleRate) {
+        const frameLength = signal.length;
+        const fftSize = nextPowerOfTwo(Math.max(32, frameLength));
+        const window = hammingWindow(frameLength);
+        const re = new Float32Array(fftSize);
+        const im = new Float32Array(fftSize);
+
+        for (let i = 0; i < frameLength; i += 1) {
+          re[i] = signal[i] * window[i];
+        }
+
+        fft(re, im, false);
+
+        const bins = fftSize / 2 + 1;
+        const frequencies = new Float32Array(bins);
+        const powerDb = new Float32Array(bins);
+        let maxDb = -Infinity;
+
+        for (let k = 0; k < bins; k += 1) {
+          const power = re[k] * re[k] + im[k] * im[k];
+          const db = 10 * Math.log10(power + 1e-12);
+          frequencies[k] = (k * sampleRate) / fftSize;
+          powerDb[k] = db;
+          if (db > maxDb) {
+            maxDb = db;
+          }
+        }
+
+        return { frequencies, powerDb, maxDb };
+      }
+
+      function computeSpectrogram(signal, sampleRate, frameLength, hopLength) {
+        const effectiveFrame = Math.max(64, frameLength);
+        const effectiveHop = Math.max(16, hopLength);
+        const fftSize = nextPowerOfTwo(effectiveFrame);
+        const bins = fftSize / 2 + 1;
+        const window = hammingWindow(effectiveFrame);
+        const frameCount = Math.max(1, Math.floor(Math.max(signal.length - effectiveFrame, 0) / effectiveHop) + 1);
+        const data = new Array(frameCount);
+        const times = new Float32Array(frameCount);
+        const frequencies = new Float32Array(bins);
+
+        for (let k = 0; k < bins; k += 1) {
+          frequencies[k] = (k * sampleRate) / fftSize;
+        }
+
+        let maxDb = -Infinity;
+        for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+          const start = frameIndex * effectiveHop;
+          const re = new Float32Array(fftSize);
+          const im = new Float32Array(fftSize);
+          for (let i = 0; i < effectiveFrame; i += 1) {
+            const sample = signal[Math.min(start + i, signal.length - 1)] || 0;
+            re[i] = sample * window[i];
+          }
+          fft(re, im, false);
+
+          const frameDb = new Float32Array(bins);
+          for (let k = 0; k < bins; k += 1) {
+            const power = re[k] * re[k] + im[k] * im[k];
+            const db = 10 * Math.log10(power + 1e-12);
+            frameDb[k] = db;
+            if (db > maxDb) {
+              maxDb = db;
+            }
+          }
+          data[frameIndex] = frameDb;
+          times[frameIndex] = (start + effectiveFrame / 2) / sampleRate;
+        }
+
+        return { data, times, frequencies, maxDb, frameLength: effectiveFrame, hopLength: effectiveHop };
+      }
+
+      function hzToMel(hz) {
+        return 2595 * Math.log10(1 + hz / 700);
+      }
+
+      function melToHz(mel) {
+        return 700 * (10 ** (mel / 2595) - 1);
+      }
+
+      function createMelFilterbank(numFilters, fftSize, sampleRate) {
+        const bins = fftSize / 2 + 1;
+        const melMin = hzToMel(0);
+        const melMax = hzToMel(sampleRate / 2);
+        const melPoints = new Float32Array(numFilters + 2);
+        for (let i = 0; i < melPoints.length; i += 1) {
+          melPoints[i] = melMin + ((melMax - melMin) * i) / (numFilters + 1);
+        }
+        const hzPoints = Array.from(melPoints, melToHz);
+        const binPoints = hzPoints.map((hz) => Math.floor((fftSize + 1) * hz / sampleRate));
+        const filters = new Array(numFilters);
+        for (let m = 0; m < numFilters; m += 1) {
+          const filter = new Float32Array(bins);
+          const left = binPoints[m];
+          const center = binPoints[m + 1];
+          const right = binPoints[m + 2];
+          for (let k = left; k < center; k += 1) {
+            if (k >= 0 && k < bins) {
+              filter[k] = (k - left) / Math.max(1, center - left);
+            }
+          }
+          for (let k = center; k < right; k += 1) {
+            if (k >= 0 && k < bins) {
+              filter[k] = (right - k) / Math.max(1, right - center);
+            }
+          }
+          filters[m] = filter;
+        }
+        return filters;
+      }
+
+      function computeAutocorrelationPitch(signal, sampleRate, minHz = 60, maxHz = 400) {
+        if (!signal.length) {
+          return {
+            periodMs: 0,
+            strength: 0,
+          };
+        }
+
+        const centered = new Float32Array(signal.length);
+        let mean = 0;
+        for (let i = 0; i < signal.length; i += 1) {
+          mean += signal[i];
+        }
+        mean /= signal.length;
+
+        let energy = 0;
+        for (let i = 0; i < signal.length; i += 1) {
+          const value = signal[i] - mean;
+          centered[i] = value;
+          energy += value * value;
+        }
+
+        if (energy <= 1e-8) {
+          return {
+            periodMs: 0,
+            strength: 0,
+          };
+        }
+
+        const minLag = Math.max(1, Math.floor(sampleRate / maxHz));
+        const maxLag = Math.min(signal.length - 2, Math.ceil(sampleRate / minHz));
+        let bestLag = minLag;
+        let bestScore = -Infinity;
+
+        for (let lag = minLag; lag <= maxLag; lag += 1) {
+          let numerator = 0;
+          let lagEnergy = 0;
+          for (let i = 0; i < centered.length - lag; i += 1) {
+            numerator += centered[i] * centered[i + lag];
+            lagEnergy += centered[i + lag] * centered[i + lag];
+          }
+          const denominator = Math.sqrt(Math.max(1e-8, energy * lagEnergy));
+          const score = numerator / denominator;
+          if (score > bestScore) {
+            bestScore = score;
+            bestLag = lag;
+          }
+        }
+
+        return {
+          periodMs: (bestLag / sampleRate) * 1000,
+          strength: Math.max(0, bestScore),
+        };
+      }
+
+      function computeMfcc(signal, sampleRate, coefficientCount = 40) {
+        if (!signal.length) {
+          return {
+            coefficients: new Float32Array(coefficientCount),
+            cepstrumWindow: new Float32Array(0),
+            cppDb: 0,
+            cppQuefrencyMs: 0,
+            pitchPeriodMs: 0,
+            pitchStrength: 0,
+            minQuefrencyMs: 2.0,
+            maxQuefrencyMs: 16.0,
+          };
+        }
+        const pitchEstimate = computeAutocorrelationPitch(signal, sampleRate);
+        const fftSize = nextPowerOfTwo(Math.max(32, signal.length));
+        const window = hammingWindow(signal.length);
+        const re = new Float32Array(fftSize);
+        const im = new Float32Array(fftSize);
+        for (let i = 0; i < signal.length; i += 1) {
+          re[i] = signal[i] * window[i];
+        }
+        fft(re, im, false);
+
+        const bins = fftSize / 2 + 1;
+        const power = new Float32Array(bins);
+        for (let k = 0; k < bins; k += 1) {
+          power[k] = re[k] * re[k] + im[k] * im[k];
+        }
+
+        const filters = createMelFilterbank(26, fftSize, sampleRate);
+        const logMels = new Float32Array(filters.length);
+        for (let m = 0; m < filters.length; m += 1) {
+          let energy = 0;
+          const filter = filters[m];
+          for (let k = 0; k < bins; k += 1) {
+            energy += power[k] * filter[k];
+          }
+          logMels[m] = Math.log(energy + 1e-10);
+        }
+
+        const mfcc = new Float32Array(coefficientCount);
+        for (let c = 0; c < coefficientCount; c += 1) {
+          let sum = 0;
+          for (let m = 0; m < logMels.length; m += 1) {
+            sum += logMels[m] * Math.cos((Math.PI * c * (m + 0.5)) / logMels.length);
+          }
+          mfcc[c] = sum;
+        }
+
+        const logMagnitude = new Float32Array(fftSize);
+        for (let k = 0; k <= fftSize / 2; k += 1) {
+          logMagnitude[k] = Math.log(Math.sqrt(power[k]) + 1e-10);
+        }
+        for (let k = 1; k < fftSize / 2; k += 1) {
+          logMagnitude[fftSize - k] = logMagnitude[k];
+        }
+
+        const cepstrumRe = new Float32Array(logMagnitude);
+        const cepstrumIm = new Float32Array(fftSize);
+        fft(cepstrumRe, cepstrumIm, true);
+
+        const minQuefrencyMs = 2.0;
+        const maxQuefrencyMs = 16.0;
+        const globalMinIndex = Math.max(1, Math.floor((minQuefrencyMs / 1000) * sampleRate));
+        const globalMaxIndex = Math.min(
+          Math.floor((maxQuefrencyMs / 1000) * sampleRate),
+          Math.floor(fftSize / 2) - 1,
+        );
+        let minIndex = globalMinIndex;
+        let maxIndex = globalMaxIndex;
+        if (pitchEstimate.strength > 0.2 && pitchEstimate.periodMs > 0) {
+          const searchHalfWidthMs = Math.max(1.0, pitchEstimate.periodMs * 0.22);
+          minIndex = Math.max(
+            globalMinIndex,
+            Math.floor(((pitchEstimate.periodMs - searchHalfWidthMs) / 1000) * sampleRate),
+          );
+          maxIndex = Math.min(
+            globalMaxIndex,
+            Math.ceil(((pitchEstimate.periodMs + searchHalfWidthMs) / 1000) * sampleRate),
+          );
+        }
+
+        let peakIndex = minIndex;
+        let peakValue = -Infinity;
+        let baselineStart = cepstrumRe[minIndex] || 0;
+        let baselineEnd = cepstrumRe[maxIndex] || baselineStart;
+
+        for (let i = minIndex; i <= maxIndex; i += 1) {
+          if (cepstrumRe[i] > peakValue) {
+            peakValue = cepstrumRe[i];
+            peakIndex = i;
+          }
+        }
+
+        const baselineFraction = (peakIndex - minIndex) / Math.max(1, maxIndex - minIndex);
+        const baselineAtPeak = baselineStart + baselineFraction * (baselineEnd - baselineStart);
+        const cppDb = 20 * (peakValue - baselineAtPeak);
+        const cppQuefrencyMs = (peakIndex / sampleRate) * 1000;
+        const cepstrumWindow = cepstrumRe.slice(minIndex, maxIndex + 1);
+
+        return {
+          coefficients: mfcc,
+          cepstrumWindow: cepstrumRe.slice(globalMinIndex, globalMaxIndex + 1),
+          cppDb,
+          cppQuefrencyMs,
+          pitchPeriodMs: pitchEstimate.periodMs,
+          pitchStrength: pitchEstimate.strength,
+          minQuefrencyMs,
+          maxQuefrencyMs,
+        };
+      }
+
+      function makePaletteColor(value) {
+        const clipped = clamp(value, 0, 1);
+        for (let i = 1; i < paletteStops.length; i += 1) {
+          const [stop, color] = paletteStops[i];
+          const [prevStop, prevColor] = paletteStops[i - 1];
+          if (clipped <= stop) {
+            const t = (clipped - prevStop) / Math.max(1e-6, stop - prevStop);
+            return [
+              Math.round(prevColor[0] + t * (color[0] - prevColor[0])),
+              Math.round(prevColor[1] + t * (color[1] - prevColor[1])),
+              Math.round(prevColor[2] + t * (color[2] - prevColor[2])),
+            ];
+          }
+        }
+        return paletteStops[paletteStops.length - 1][1];
+      }
+
+      function drawGrid(ctx, width, height, divisionsX, divisionsY) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+        ctx.lineWidth = 1;
+        for (let i = 1; i < divisionsX; i += 1) {
+          const x = (width * i) / divisionsX;
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
+        for (let i = 1; i < divisionsY; i += 1) {
+          const y = (height * i) / divisionsY;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawSelectionOverlay(ctx, canvas, selectionStartSec, selectionEndSec) {
+        const viewport = getViewportBounds();
+        const startX = ((selectionStartSec - viewport.start) / viewport.duration) * canvas.width;
+        const endX = ((selectionEndSec - viewport.start) / viewport.duration) * canvas.width;
+        ctx.save();
+        ctx.fillStyle = "rgba(179, 71, 45, 0.14)";
+        ctx.strokeStyle = "rgba(255, 182, 153, 0.92)";
+        ctx.lineWidth = 2;
+        ctx.fillRect(startX, 0, endX - startX, canvas.height);
+        ctx.strokeRect(startX, 0, endX - startX, canvas.height);
+        ctx.restore();
+      }
+
+      function drawWaveform(signal, envelope, envelopeRate) {
+        const canvas = elements.waveformCanvas;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, "#131e25");
+        gradient.addColorStop(1, "#0f181d");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawGrid(ctx, canvas.width, canvas.height, 8, 4);
+
+        if (!signal.length) {
+          paintCanvasMessage(canvas, "Waveform", "Start the microphone to populate the buffer.");
+          return;
+        }
+
+        const centerY = canvas.height / 2;
+        let peakAmplitude = state.waveformAutoScale ? 1e-3 : 1.0;
+        if (state.waveformAutoScale) {
+          for (let i = 0; i < signal.length; i += 1) {
+            peakAmplitude = Math.max(peakAmplitude, Math.abs(signal[i]));
+          }
+          for (let i = 0; i < envelope.length; i += 1) {
+            peakAmplitude = Math.max(peakAmplitude, Math.abs(envelope[i]));
+          }
+        }
+        const amplitudeScale = (canvas.height * 0.39) / peakAmplitude;
+        ctx.strokeStyle = "rgba(129, 212, 218, 0.95)";
+        ctx.lineWidth = 1;
+
+        const samplesPerPixel = Math.max(1, Math.floor(signal.length / canvas.width));
+        for (let x = 0; x < canvas.width; x += 1) {
+          const start = x * samplesPerPixel;
+          const end = Math.min(signal.length, start + samplesPerPixel);
+          let min = 1.0;
+          let max = -1.0;
+          for (let i = start; i < end; i += 1) {
+            const sample = signal[i];
+            if (sample < min) {
+              min = sample;
+            }
+            if (sample > max) {
+              max = sample;
+            }
+          }
+          ctx.beginPath();
+          ctx.moveTo(x + 0.5, centerY - max * amplitudeScale);
+          ctx.lineTo(x + 0.5, centerY - min * amplitudeScale);
+          ctx.stroke();
+        }
+
+        if (envelope.length) {
+          ctx.save();
+          ctx.strokeStyle = "rgba(255, 184, 146, 0.96)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          const viewport = getViewportBounds();
+          for (let x = 0; x < canvas.width; x += 1) {
+            const timeInView = (x / (canvas.width - 1)) * viewport.duration;
+            const envIndex = Math.min(
+              envelope.length - 1,
+              Math.round(timeInView * envelopeRate),
+            );
+            const y = centerY - envelope[envIndex] * amplitudeScale;
+            if (x === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        const selection = getSelectionBounds();
+        drawSelectionOverlay(ctx, canvas, selection.start, selection.end);
+
+        ctx.fillStyle = "rgba(255, 245, 230, 0.9)";
+        ctx.font = '13px "Avenir Next", "Segoe UI", sans-serif';
+        ctx.fillText("Drag inside the highlight to move it; drag an edge to resize.", 18, 24);
+      }
+
+      function drawSpectrogram(spectrogram, selectionStartSec, selectionEndSec) {
+        const canvas = elements.spectrogramCanvas;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, "#121d25");
+        gradient.addColorStop(1, "#0d151a");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawGrid(ctx, canvas.width, canvas.height, 8, 5);
+
+        if (!spectrogram || !spectrogram.data.length) {
+          paintCanvasMessage(canvas, "Spectrogram", "Buffered audio will appear here once capture starts.");
+          return;
+        }
+
+        const { data, frequencies, maxDb } = spectrogram;
+        const bins = frequencies.length;
+        const frames = data.length;
+        const imageData = ctx.createImageData(canvas.width, canvas.height);
+        const floorDb = maxDb - 75;
+
+        for (let x = 0; x < canvas.width; x += 1) {
+          const frameIndex = Math.min(frames - 1, Math.floor((x / canvas.width) * frames));
+          const frame = data[frameIndex];
+          for (let y = 0; y < canvas.height; y += 1) {
+            const binIndex = Math.min(
+              bins - 1,
+              Math.floor(((canvas.height - 1 - y) / canvas.height) * bins),
+            );
+            const normalized = clamp((frame[binIndex] - floorDb) / (maxDb - floorDb + 1e-6), 0, 1);
+            const [r, g, b] = makePaletteColor(normalized);
+            const pixel = (y * canvas.width + x) * 4;
+            imageData.data[pixel] = r;
+            imageData.data[pixel + 1] = g;
+            imageData.data[pixel + 2] = b;
+            imageData.data[pixel + 3] = 255;
+          }
+        }
+        ctx.putImageData(imageData, 0, 0);
+
+        drawSelectionOverlay(ctx, canvas, selectionStartSec, selectionEndSec);
+
+        ctx.fillStyle = "rgba(255, 245, 230, 0.9)";
+        ctx.font = '13px "Avenir Next", "Segoe UI", sans-serif';
+        ctx.fillText(`0-${Math.round(frequencies[frequencies.length - 1])} Hz`, 18, 24);
+      }
+
+      function drawSpectrum(spectrum) {
+        const canvas = elements.spectrumCanvas;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, "#121f25");
+        gradient.addColorStop(1, "#0f171b");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawGrid(ctx, canvas.width, canvas.height, 8, 4);
+
+        if (!spectrum || !spectrum.frequencies.length) {
+          paintCanvasMessage(canvas, "Spectrum", "Move the selection window onto captured audio.");
+          return;
+        }
+
+        const floorDb = spectrum.maxDb - 75;
+        ctx.strokeStyle = "rgba(129, 212, 218, 0.96)";
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        for (let i = 0; i < spectrum.frequencies.length; i += 1) {
+          const x = (i / (spectrum.frequencies.length - 1)) * canvas.width;
+          const normalized = clamp((spectrum.powerDb[i] - floorDb) / (spectrum.maxDb - floorDb + 1e-6), 0, 1);
+          const y = canvas.height - normalized * (canvas.height - 26) - 12;
+          if (i === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(255, 245, 230, 0.9)";
+        ctx.font = '13px "Avenir Next", "Segoe UI", sans-serif';
+        ctx.fillText(`0-${Math.round(spectrum.frequencies[spectrum.frequencies.length - 1])} Hz`, 18, 24);
+      }
+
+      function drawMfcc(mfccResult) {
+        const canvas = elements.mfccCanvas;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, "#121f25");
+        gradient.addColorStop(1, "#0f171b");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawGrid(ctx, canvas.width, canvas.height, 13, 4);
+
+        if (!mfccResult || !mfccResult.coefficients.length) {
+          paintCanvasMessage(canvas, "MFCC", "The selected slice will populate these coefficients.");
+          return;
+        }
+
+        const {
+          coefficients,
+          cepstrumWindow,
+          cppDb,
+          cppQuefrencyMs,
+          pitchPeriodMs,
+          pitchStrength,
+          minQuefrencyMs,
+          maxQuefrencyMs,
+        } = mfccResult;
+
+        let maxAbs = 1e-6;
+        for (const value of coefficients) {
+          maxAbs = Math.max(maxAbs, Math.abs(value));
+        }
+
+        const barTop = 28;
+        const barBottom = canvas.height * 0.64;
+        const baseline = (barTop + barBottom) / 2;
+        const barWidth = canvas.width / coefficients.length;
+        for (let i = 0; i < coefficients.length; i += 1) {
+          const normalized = coefficients[i] / maxAbs;
+          const barHeight = normalized * ((barBottom - barTop) * 0.42);
+          const width = Math.max(4, barWidth * 0.7);
+          const x = i * barWidth + (barWidth - width) / 2;
+          const y = normalized >= 0 ? baseline - barHeight : baseline;
+          const height = Math.abs(barHeight);
+          ctx.fillStyle = i % 2 === 0 ? "rgba(255, 184, 146, 0.86)" : "rgba(129, 212, 218, 0.86)";
+          ctx.fillRect(x, y, width, height);
+        }
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+        ctx.beginPath();
+        ctx.moveTo(0, baseline);
+        ctx.lineTo(canvas.width, baseline);
+        ctx.stroke();
+
+        const stripTop = canvas.height * 0.72;
+        const stripBottom = canvas.height - 20;
+        const stripHeight = stripBottom - stripTop;
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+        ctx.strokeRect(16, stripTop, canvas.width - 32, stripHeight);
+
+        if (cepstrumWindow.length) {
+          let cepMin = Infinity;
+          let cepMax = -Infinity;
+          for (const value of cepstrumWindow) {
+            cepMin = Math.min(cepMin, value);
+            cepMax = Math.max(cepMax, value);
+          }
+          const cepRange = Math.max(1e-6, cepMax - cepMin);
+
+          ctx.save();
+          ctx.strokeStyle = "rgba(129, 212, 218, 0.9)";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          for (let i = 0; i < cepstrumWindow.length; i += 1) {
+            const x = 16 + (i / Math.max(1, cepstrumWindow.length - 1)) * (canvas.width - 32);
+            const normalized = (cepstrumWindow[i] - cepMin) / cepRange;
+            const y = stripBottom - normalized * (stripHeight - 8) - 4;
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          ctx.stroke();
+          ctx.restore();
+
+          const cppX =
+            16 +
+            ((cppQuefrencyMs - minQuefrencyMs) / Math.max(1e-6, maxQuefrencyMs - minQuefrencyMs)) *
+              (canvas.width - 32);
+          let pitchX = null;
+          if (pitchStrength > 0.2 && pitchPeriodMs >= minQuefrencyMs && pitchPeriodMs <= maxQuefrencyMs) {
+            pitchX =
+              16 +
+              ((pitchPeriodMs - minQuefrencyMs) / Math.max(1e-6, maxQuefrencyMs - minQuefrencyMs)) *
+                (canvas.width - 32);
+            ctx.save();
+            ctx.strokeStyle = "rgba(129, 212, 218, 0.85)";
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(pitchX, stripTop);
+            ctx.lineTo(pitchX, stripBottom);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          ctx.save();
+          ctx.strokeStyle = "rgba(255, 184, 146, 0.96)";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          ctx.moveTo(cppX, stripTop);
+          ctx.lineTo(cppX, stripBottom);
+          ctx.stroke();
+          ctx.restore();
+
+          ctx.fillStyle = "rgba(255, 184, 146, 0.96)";
+          ctx.beginPath();
+          ctx.arc(cppX, stripTop + 8, 4, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (pitchX !== null) {
+            ctx.fillStyle = "rgba(129, 212, 218, 0.96)";
+            ctx.beginPath();
+            ctx.arc(pitchX, stripTop + 8, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        ctx.fillStyle = "rgba(255, 245, 230, 0.9)";
+        ctx.font = '13px "Avenir Next", "Segoe UI", sans-serif';
+        ctx.fillText(`c0-c${coefficients.length - 1}`, 18, 24);
+        ctx.fillText(`CPP ${cppDb.toFixed(2)} dB @ ${cppQuefrencyMs.toFixed(2)} ms`, 18, 42);
+        if (pitchStrength > 0.2) {
+          ctx.fillText(
+            `Pitch period ${pitchPeriodMs.toFixed(2)} ms`,
+            Math.min(canvas.width - 170, 18),
+            58,
+          );
+        }
+        ctx.fillText(`${minQuefrencyMs.toFixed(0)} ms`, 18, canvas.height - 4);
+        ctx.fillText(`${maxQuefrencyMs.toFixed(0)} ms`, canvas.width - 54, canvas.height - 4);
+        ctx.fillText(
+          "CPP location",
+          Math.min(
+            canvas.width - 128,
+            16 +
+              ((cppQuefrencyMs - minQuefrencyMs) / Math.max(1e-6, maxQuefrencyMs - minQuefrencyMs)) *
+                (canvas.width - 32) +
+              8,
+          ),
+          stripTop + 14,
+        );
+      }
+
+      async function setupCaptureNode(audioContext, sourceNode) {
+        const workletSource = `
+          class CaptureProcessor extends AudioWorkletProcessor {
+            process(inputs) {
+              const input = inputs[0];
+              if (input && input[0] && input[0].length) {
+                this.port.postMessage(input[0].slice(0));
+              }
+              return true;
+            }
+          }
+          registerProcessor("capture-processor", CaptureProcessor);
+        `;
+
+        try {
+          const blob = new Blob([workletSource], { type: "application/javascript" });
+          const moduleUrl = URL.createObjectURL(blob);
+          await audioContext.audioWorklet.addModule(moduleUrl);
+          URL.revokeObjectURL(moduleUrl);
+
+          const node = new AudioWorkletNode(audioContext, "capture-processor", {
+            numberOfInputs: 1,
+            numberOfOutputs: 0,
+            channelCount: 1,
+          });
+          sourceNode.connect(node);
+          state.usingWorklet = true;
+          return node;
+        } catch (error) {
+          console.warn("AudioWorkletNode setup failed; falling back to ScriptProcessorNode.", error);
+          const processor = audioContext.createScriptProcessor(2048, 1, 1);
+          processor.onaudioprocess = (event) => {
+            const channel = event.inputBuffer.getChannelData(0);
+            handleIncomingSamples(new Float32Array(channel));
+          };
+          sourceNode.connect(processor);
+          processor.connect(audioContext.destination);
+          state.usingWorklet = false;
+          return processor;
+        }
+      }
+
+      function handleIncomingSamples(chunk) {
+        if (!chunk || !chunk.length || state.isPaused) {
+          return;
+        }
+        state.chunks.push(new Float32Array(chunk));
+        state.totalSamples += chunk.length;
+
+        if (state.followLive) {
+          const totalDuration = totalDurationSec();
+          state.viewportStartSec = Math.max(0, totalDuration - state.viewDurationSec);
+          const selectionEnd = state.selectionCenterSec + state.selectionWidthSec / 2;
+          if (selectionEnd < state.viewportStartSec || selectionEnd > totalDuration) {
+            state.selectionCenterSec = Math.max(
+              state.viewportStartSec + state.selectionWidthSec / 2,
+              totalDuration - state.selectionWidthSec / 2,
+            );
+          }
+        }
+
+        syncSelectionToViewport();
+        updatePanSlider();
+        updateStatus();
+        scheduleRender();
+      }
+
+      async function startMicrophone() {
+        if (state.isStarted) {
+          return;
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          alert("This browser does not support microphone capture via navigator.mediaDevices.getUserMedia.");
+          return;
+        }
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              channelCount: 1,
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            },
+          });
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          const audioContext = new AudioContextClass();
+          await audioContext.resume();
+
+          const sourceNode = audioContext.createMediaStreamSource(stream);
+          const captureNode = await setupCaptureNode(audioContext, sourceNode);
+          if (state.usingWorklet) {
+            captureNode.port.onmessage = (event) => {
+              handleIncomingSamples(event.data);
+            };
+          }
+
+          state.audioContext = audioContext;
+          state.mediaStream = stream;
+          state.sourceNode = sourceNode;
+          state.captureNode = captureNode;
+          state.inputSampleRate = audioContext.sampleRate;
+          state.isStarted = true;
+          state.isPaused = false;
+          elements.pauseButton.disabled = false;
+          elements.startButton.disabled = true;
+          refreshMicrophoneLabel();
+          updateStatus();
+          scheduleRender();
+        } catch (error) {
+          console.error(error);
+          alert(`Microphone setup failed: ${error.message}`);
+        }
+      }
+
+      function togglePause() {
+        if (!state.isStarted) {
+          return;
+        }
+        state.isPaused = !state.isPaused;
+        elements.pauseButton.textContent = state.isPaused ? "Resume capture" : "Pause capture";
+        updateStatus();
+      }
+
+      function clearHistory() {
+        state.chunks = [];
+        state.totalSamples = 0;
+        state.viewportStartSec = 0;
+        state.selectionCenterSec = state.selectionWidthSec / 2;
+        updatePanSlider();
+        updateStatus();
+        scheduleRender();
+      }
+
+      async function resetEverything() {
+        state.dragState = null;
+
+        if (state.captureNode) {
+          try {
+            if (state.usingWorklet && state.captureNode.port) {
+              state.captureNode.port.onmessage = null;
+            }
+            state.captureNode.disconnect();
+          } catch (error) {
+            console.warn("Capture node disconnect failed during reset.", error);
+          }
+        }
+
+        if (state.sourceNode) {
+          try {
+            state.sourceNode.disconnect();
+          } catch (error) {
+            console.warn("Source node disconnect failed during reset.", error);
+          }
+        }
+
+        if (state.mediaStream) {
+          for (const track of state.mediaStream.getTracks()) {
+            track.stop();
+          }
+        }
+
+        if (state.audioContext) {
+          try {
+            await state.audioContext.close();
+          } catch (error) {
+            console.warn("AudioContext close failed during reset.", error);
+          }
+        }
+
+        state.audioContext = null;
+        state.mediaStream = null;
+        state.sourceNode = null;
+        state.captureNode = null;
+        state.usingWorklet = false;
+        state.isStarted = false;
+        state.isPaused = false;
+        state.inputSampleRate = 0;
+        state.chunks = [];
+        state.totalSamples = 0;
+        state.analysisRate = 16000;
+        state.viewDurationSec = 6.0;
+        state.viewportStartSec = 0.0;
+        state.selectionCenterSec = 0.015;
+        state.selectionWidthSec = 0.03;
+        state.spectrogramFrameSec = 0.02;
+        state.spectrogramHopSec = 0.005;
+        state.hilbertEnvelopeCutoffHz = 50;
+        state.followLive = true;
+        state.usePreemphasis = false;
+        state.waveformAutoScale = true;
+        state.renderScheduled = false;
+        state.isRendering = false;
+        state.needsAnotherRender = false;
+
+        elements.startButton.disabled = false;
+        elements.pauseButton.disabled = true;
+        elements.pauseButton.textContent = "Pause capture";
+
+        refreshMicrophoneLabel();
+        syncSelectionToViewport();
+        syncControlsToState();
+        updatePanSlider();
+        updateStatus();
+        scheduleRender();
+      }
+
+      function panBy(deltaSec) {
+        const maxStart = Math.max(0, totalDurationSec() - state.viewDurationSec);
+        state.viewportStartSec = clamp(state.viewportStartSec + deltaSec, 0, maxStart);
+        state.followLive = false;
+        elements.followLiveToggle.checked = false;
+        syncSelectionToViewport();
+        updatePanSlider();
+        scheduleRender();
+      }
+
+      function timeAtCanvasX(canvas, clientX) {
+        const rect = canvas.getBoundingClientRect();
+        const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+        const viewport = getViewportBounds();
+        return viewport.start + ratio * viewport.duration;
+      }
+
+      function handleWaveformPointerDown(event) {
+        if (!state.totalSamples) {
+          return;
+        }
+        const canvas = elements.waveformCanvas;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const selection = getSelectionBounds();
+        const viewport = getViewportBounds();
+        const leftX = ((selection.start - viewport.start) / viewport.duration) * rect.width;
+        const rightX = ((selection.end - viewport.start) / viewport.duration) * rect.width;
+        const edgeThreshold = 12;
+
+        if (Math.abs(x - leftX) <= edgeThreshold) {
+          state.dragState = { mode: "resize-left" };
+        } else if (Math.abs(x - rightX) <= edgeThreshold) {
+          state.dragState = { mode: "resize-right" };
+        } else if (x >= leftX && x <= rightX) {
+          const pointerTime = timeAtCanvasX(canvas, event.clientX);
+          state.dragState = {
+            mode: "move",
+            offsetSec: pointerTime - state.selectionCenterSec,
+          };
+        } else {
+          state.dragState = { mode: "move", offsetSec: 0 };
+          state.selectionCenterSec = timeAtCanvasX(canvas, event.clientX);
+        }
+
+        state.followLive = false;
+        elements.followLiveToggle.checked = false;
+        syncSelectionToViewport();
+        canvas.setPointerCapture(event.pointerId);
+        scheduleRender();
+      }
+
+      function handleWaveformPointerMove(event) {
+        if (!state.dragState) {
+          return;
+        }
+        const pointerTime = timeAtCanvasX(elements.waveformCanvas, event.clientX);
+        const minWidth = 0.015;
+        const selection = getSelectionBounds();
+
+        if (state.dragState.mode === "move") {
+          state.selectionCenterSec = pointerTime - state.dragState.offsetSec;
+        } else if (state.dragState.mode === "resize-left") {
+          const newStart = clamp(pointerTime, state.viewportStartSec, selection.end - minWidth);
+          state.selectionCenterSec = (newStart + selection.end) / 2;
+          state.selectionWidthSec = selection.end - newStart;
+        } else if (state.dragState.mode === "resize-right") {
+          const viewportEnd = getViewportBounds().end;
+          const newEnd = clamp(pointerTime, selection.start + minWidth, viewportEnd);
+          state.selectionCenterSec = (selection.start + newEnd) / 2;
+          state.selectionWidthSec = newEnd - selection.start;
+        }
+
+        elements.windowWidthRange.value = Math.round(state.selectionWidthSec * 1000);
+        updateWindowWidthOutput();
+        syncSelectionToViewport();
+        updateStatus();
+        scheduleRender();
+      }
+
+      function handleWaveformPointerUp(event) {
+        if (!state.dragState) {
+          return;
+        }
+        elements.waveformCanvas.releasePointerCapture(event.pointerId);
+        state.dragState = null;
+      }
+
+      function handleSpectrogramPointerDown(event) {
+        if (!state.totalSamples) {
+          return;
+        }
+        state.followLive = false;
+        elements.followLiveToggle.checked = false;
+        state.selectionCenterSec = timeAtCanvasX(elements.spectrogramCanvas, event.clientX);
+        syncSelectionToViewport();
+        updateStatus();
+        scheduleRender();
+      }
+
+      async function renderAll() {
+        state.isRendering = true;
+        try {
+          updateWindowWidthOutput();
+          updateStatus();
+          describeViewport();
+          updatePanSlider();
+
+          if (!state.inputSampleRate || !state.totalSamples) {
+            paintCanvasMessage(elements.waveformCanvas, "Waveform", "Start the microphone to begin streaming.");
+            paintCanvasMessage(elements.spectrogramCanvas, "Spectrogram", "The live STFT view appears here.");
+            paintCanvasMessage(elements.spectrumCanvas, "Spectrum", "Select a buffered slice to inspect it.");
+            paintCanvasMessage(elements.mfccCanvas, "MFCC", "MFCC coefficients are derived from the active slice.");
+            return;
+          }
+
+          syncSelectionToViewport();
+
+          const viewport = getViewportBounds();
+          const viewportStart = viewport.start;
+          const viewportEnd = viewport.end;
+          const visibleRaw = extractSegment(viewportStart, viewportEnd);
+          const envelopeRate = Math.min(2000, state.inputSampleRate);
+          const fullbandEnvelope = computeHilbertEnvelope(
+            visibleRaw,
+            state.inputSampleRate,
+            state.hilbertEnvelopeCutoffHz,
+          );
+          const envelope = resampleLinear(fullbandEnvelope, state.inputSampleRate, envelopeRate);
+
+          let analysisSignal = resampleLinear(visibleRaw, state.inputSampleRate, state.analysisRate);
+          if (state.usePreemphasis) {
+            analysisSignal = applyPreemphasis(analysisSignal);
+          }
+
+          const frameLength = Math.max(64, Math.round(state.spectrogramFrameSec * state.analysisRate));
+          const hopLength = Math.max(16, Math.round(state.spectrogramHopSec * state.analysisRate));
+          const spectrogram = computeSpectrogram(analysisSignal, state.analysisRate, frameLength, hopLength);
+
+          const selection = getSelectionBounds();
+          const relativeSelectionStart = Math.max(0, selection.start - viewportStart);
+          const relativeSelectionEnd = Math.min(viewport.duration, selection.end - viewportStart);
+          const selectionSignal = resampleLinear(
+            extractSegment(selection.start, selection.end),
+            state.inputSampleRate,
+            state.analysisRate,
+          );
+          const analysisSlice = state.usePreemphasis ? applyPreemphasis(selectionSignal) : selectionSignal;
+          const spectrum = computeSpectrum(analysisSlice, state.analysisRate);
+          const mfcc = computeMfcc(analysisSlice, state.analysisRate, 40);
+
+          drawWaveform(visibleRaw, envelope, envelopeRate);
+          drawSpectrogram(spectrogram, selection.start, selection.end);
+          drawSpectrum(spectrum);
+          drawMfcc(mfcc);
+
+          elements.spectrumSubtitle.textContent =
+            `${Math.round(state.analysisRate / 1000)} kHz slice, ${Math.round(state.selectionWidthSec * 1000)} ms window centered at ${state.selectionCenterSec.toFixed(2)} s`;
+          elements.mfccSubtitle.textContent =
+            `40 coefficients for ${relativeSelectionStart.toFixed(2)}-${relativeSelectionEnd.toFixed(2)} s, CPP ${mfcc.cppDb.toFixed(2)} dB at ${mfcc.cppQuefrencyMs.toFixed(2)} ms`;
+        } finally {
+          state.isRendering = false;
+          if (state.needsAnotherRender) {
+            state.needsAnotherRender = false;
+            scheduleRender();
+          }
+        }
+      }
+
+      elements.startButton.addEventListener("click", startMicrophone);
+      elements.pauseButton.addEventListener("click", togglePause);
+      elements.clearButton.addEventListener("click", clearHistory);
+      elements.resetButton.addEventListener("click", resetEverything);
+      elements.saveAudioButton.addEventListener("click", exportBufferedAudioAsWav);
+      elements.screenshotButton.addEventListener("click", capturePageScreenshot);
+      elements.analysisRateSelect.addEventListener("change", (event) => {
+        state.analysisRate = Number(event.target.value);
+        scheduleRender();
+      });
+      elements.viewDurationSelect.addEventListener("change", (event) => {
+        state.viewDurationSec = Number(event.target.value);
+        if (state.followLive) {
+          state.viewportStartSec = Math.max(0, totalDurationSec() - state.viewDurationSec);
+        }
+        syncSelectionToViewport();
+        updatePanSlider();
+        scheduleRender();
+      });
+      elements.windowWidthRange.addEventListener("input", (event) => {
+        state.selectionWidthSec = Number(event.target.value) / 1000;
+        syncSelectionToViewport();
+        updateWindowWidthOutput();
+        updateStatus();
+        scheduleRender();
+      });
+      elements.preemphasisToggle.addEventListener("change", (event) => {
+        state.usePreemphasis = event.target.checked;
+        scheduleRender();
+      });
+      elements.followLiveToggle.addEventListener("change", (event) => {
+        setFollowLive(event.target.checked);
+      });
+      elements.waveformAutoscaleToggle.addEventListener("change", (event) => {
+        state.waveformAutoScale = event.target.checked;
+        scheduleRender();
+      });
+      elements.panSlider.addEventListener("input", (event) => {
+        state.followLive = false;
+        elements.followLiveToggle.checked = false;
+        state.viewportStartSec = Number(event.target.value);
+        syncSelectionToViewport();
+        scheduleRender();
+      });
+      elements.panLeftButton.addEventListener("click", () => panBy(-state.viewDurationSec * 0.35));
+      elements.panRightButton.addEventListener("click", () => panBy(state.viewDurationSec * 0.35));
+
+      elements.waveformCanvas.addEventListener("pointerdown", handleWaveformPointerDown);
+      elements.waveformCanvas.addEventListener("pointermove", handleWaveformPointerMove);
+      elements.waveformCanvas.addEventListener("pointerup", handleWaveformPointerUp);
+      elements.waveformCanvas.addEventListener("pointercancel", handleWaveformPointerUp);
+      elements.spectrogramCanvas.addEventListener("pointerdown", handleSpectrogramPointerDown);
+
+      syncControlsToState();
+      updateEnvironmentInfo();
+      refreshMicrophoneLabel();
+      updateStatus();
+      scheduleRender();
+    </script>
+  </body>
+</html>
