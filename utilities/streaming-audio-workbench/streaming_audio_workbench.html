@@ -82,14 +82,26 @@
       }
 
       .status-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 8px;
         width: 100%;
+        display: grid;
+        gap: 8px;
+      }
+
+      .status-row {
+        display: grid;
+        gap: 8px;
+      }
+
+      .status-row-audio {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .status-row-system {
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 1.35fr);
       }
 
       .metric {
-        min-height: 58px;
+        min-height: 52px;
         padding: 8px 10px;
         border-radius: 14px;
         background: rgba(255, 255, 255, 0.56);
@@ -108,10 +120,6 @@
         margin-top: 3px;
         font-size: 0.9rem;
         font-weight: 600;
-      }
-
-      .metric-wide {
-        grid-column: span 2;
       }
 
       .controls {
@@ -382,7 +390,8 @@
           grid-template-columns: 1fr;
         }
 
-        .status-grid {
+        .status-row-audio,
+        .status-row-system {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
@@ -418,33 +427,37 @@
         </article>
         <aside class="panel status-card">
           <div class="status-grid">
-            <div class="metric">
-              <span class="metric-label">Capture</span>
-              <span class="metric-value" id="statusLabel">Idle</span>
+            <div class="status-row status-row-audio">
+              <div class="metric">
+                <span class="metric-label">Capture</span>
+                <span class="metric-value" id="statusLabel">Idle</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Buffered Audio</span>
+                <span class="metric-value" id="bufferDurationLabel">0.00 s</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Input Rate</span>
+                <span class="metric-value" id="inputRateLabel">-</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Selection</span>
+                <span class="metric-value" id="selectionLabel">0.00-0.03 s</span>
+              </div>
             </div>
-            <div class="metric">
-              <span class="metric-label">Buffered Audio</span>
-              <span class="metric-value" id="bufferDurationLabel">0.00 s</span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">Input Rate</span>
-              <span class="metric-value" id="inputRateLabel">-</span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">Selection</span>
-              <span class="metric-value" id="selectionLabel">0.00-0.03 s</span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">Browser</span>
-              <span class="metric-value" id="browserLabel">Detecting...</span>
-            </div>
-            <div class="metric">
-              <span class="metric-label">OS</span>
-              <span class="metric-value" id="osLabel">Detecting...</span>
-            </div>
-            <div class="metric metric-wide">
-              <span class="metric-label">Microphone</span>
-              <span class="metric-value" id="microphoneLabel">Not connected</span>
+            <div class="status-row status-row-system">
+              <div class="metric">
+                <span class="metric-label">Browser</span>
+                <span class="metric-value" id="browserLabel">Detecting...</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">OS</span>
+                <span class="metric-value" id="osLabel">Detecting...</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Microphone</span>
+                <span class="metric-value" id="microphoneLabel">Not connected</span>
+              </div>
             </div>
           </div>
         </aside>
