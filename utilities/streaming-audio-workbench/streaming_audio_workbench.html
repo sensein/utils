@@ -230,7 +230,7 @@
 
       .transport-row {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 8px;
         justify-items: start;
       }
@@ -243,13 +243,15 @@
 
       .playback-row {
         display: grid;
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr) auto;
         gap: 8px;
+        align-items: end;
       }
 
       .playback-actions {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-auto-flow: column;
+        grid-auto-columns: min-content;
         gap: 6px;
       }
 
@@ -521,7 +523,16 @@
                   >
                     <span class="transport-icon" aria-hidden="true">⏹</span>
                   </button>
+                  <button
+                    class="secondary transport-button icon-only"
+                    id="uploadAudioButton"
+                    aria-label="Upload audio file"
+                    title="Upload audio file"
+                  >
+                    <span class="transport-icon" aria-hidden="true">⤴</span>
+                  </button>
                 </div>
+                <input id="uploadAudioInput" type="file" accept="audio/*" hidden />
               </div>
               <div class="control">
                 <label>Playback</label>
@@ -529,7 +540,7 @@
                   <div class="mini-field">
                     <span class="mini-label">Source</span>
                     <select id="playbackModeSelect">
-                      <option value="start">From start</option>
+                      <option value="start">Start</option>
                       <option value="window">Window</option>
                       <option value="cursor">Cursor</option>
                     </select>
@@ -648,7 +659,8 @@
             <strong>Notes:</strong> microphone capture requires permission and may need a secure
             context such as <code>http://localhost</code>. The waveform keeps the full buffered
             history in memory so you can pause, pan backward, and revisit older slices without
-            losing the stream. Click the waveform or spectrogram to place the playback cursor.
+            losing the stream. You can also upload an audio file into the same buffer. Click the
+            waveform or spectrogram to place the playback cursor.
           </section>
         </aside>
 
@@ -704,6 +716,7 @@
         isPlayingBack: false,
         isPlaybackPaused: false,
         inputSampleRate: 0,
+        loadedAudioLabel: "",
         chunks: [],
         totalSamples: 0,
         analysisRate: 16000,
@@ -731,6 +744,8 @@
         resumeCaptureButton: document.getElementById("resumeCaptureButton"),
         pauseCaptureButton: document.getElementById("pauseCaptureButton"),
         stopCaptureButton: document.getElementById("stopCaptureButton"),
+        uploadAudioButton: document.getElementById("uploadAudioButton"),
+        uploadAudioInput: document.getElementById("uploadAudioInput"),
         pausePlaybackButton: document.getElementById("pausePlaybackButton"),
         stopPlaybackButton: document.getElementById("stopPlaybackButton"),
         resetButton: document.getElementById("resetButton"),
@@ -844,6 +859,8 @@
           if (!track.label && settings.deviceId) {
             label = `Device ${settings.deviceId}`;
           }
+        } else if (state.loadedAudioLabel) {
+          label = `Loaded: ${state.loadedAudioLabel}`;
         }
         elements.microphoneLabel.textContent = label;
       }
@@ -1069,6 +1086,24 @@
           end: totalDuration,
           label: "start",
         };
+      }
+
+      function audioBufferToMono(buffer) {
+        if (buffer.numberOfChannels === 1) {
+          return new Float32Array(buffer.getChannelData(0));
+        }
+        const mono = new Float32Array(buffer.length);
+        for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex += 1) {
+          const channel = buffer.getChannelData(channelIndex);
+          for (let sampleIndex = 0; sampleIndex < buffer.length; sampleIndex += 1) {
+            mono[sampleIndex] += channel[sampleIndex];
+          }
+        }
+        const scale = 1 / buffer.numberOfChannels;
+        for (let sampleIndex = 0; sampleIndex < mono.length; sampleIndex += 1) {
+          mono[sampleIndex] *= scale;
+        }
+        return mono;
       }
 
       async function stopPlayback() {
@@ -1876,6 +1911,23 @@
         ctx.restore();
       }
 
+      function drawSelectionHandles(ctx, canvas, selectionStartSec, selectionEndSec) {
+        const viewport = getViewportBounds();
+        const startX = ((selectionStartSec - viewport.start) / viewport.duration) * canvas.width;
+        const endX = ((selectionEndSec - viewport.start) / viewport.duration) * canvas.width;
+        const handleHeight = Math.min(42, canvas.height * 0.26);
+        const handleTop = (canvas.height - handleHeight) / 2;
+
+        ctx.save();
+        ctx.fillStyle = "rgba(255, 214, 186, 0.95)";
+        for (const x of [startX, endX]) {
+          ctx.fillRect(x - 2, handleTop, 4, handleHeight);
+          ctx.fillRect(x - 6, handleTop + 8, 2, handleHeight - 16);
+          ctx.fillRect(x + 4, handleTop + 8, 2, handleHeight - 16);
+        }
+        ctx.restore();
+      }
+
       function drawCursorOverlay(ctx, canvas, cursorSec) {
         const viewport = getViewportBounds();
         if (cursorSec < viewport.start || cursorSec > viewport.end) {
@@ -1977,11 +2029,12 @@
 
         const selection = getSelectionBounds();
         drawSelectionOverlay(ctx, canvas, selection.start, selection.end);
+        drawSelectionHandles(ctx, canvas, selection.start, selection.end);
         drawCursorOverlay(ctx, canvas, state.playCursorSec);
 
         ctx.fillStyle = "rgba(255, 245, 230, 0.9)";
         ctx.font = '13px "Avenir Next", "Segoe UI", sans-serif';
-        ctx.fillText("Drag the highlight to inspect; click to move the cursor for playback.", 18, 24);
+        ctx.fillText("Drag inside to move, drag the bright edge handles to resize, click to set cursor.", 18, 24);
       }
 
       function drawSpectrogram(spectrogram, selectionStartSec, selectionEndSec) {
@@ -2026,6 +2079,7 @@
         ctx.putImageData(imageData, 0, 0);
 
         drawSelectionOverlay(ctx, canvas, selectionStartSec, selectionEndSec);
+        drawSelectionHandles(ctx, canvas, selectionStartSec, selectionEndSec);
         drawCursorOverlay(ctx, canvas, state.playCursorSec);
 
         ctx.fillStyle = "rgba(255, 245, 230, 0.9)";
@@ -2297,6 +2351,7 @@
           return;
         }
         await stopPlayback();
+        state.loadedAudioLabel = "";
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           alert("This browser does not support microphone capture via navigator.mediaDevices.getUserMedia.");
@@ -2337,6 +2392,53 @@
         } catch (error) {
           console.error(error);
           alert(`Microphone setup failed: ${error.message}`);
+        }
+      }
+
+      function openAudioUploadPicker() {
+        elements.uploadAudioInput.click();
+      }
+
+      async function handleAudioFileSelected(event) {
+        const file = event.target.files && event.target.files[0];
+        if (!file) {
+          return;
+        }
+
+        try {
+          await stopPlayback();
+          await releaseCaptureResources();
+          state.isStarted = false;
+          state.isPaused = false;
+
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          const decodeContext = new AudioContextClass();
+          const arrayBuffer = await file.arrayBuffer();
+          const audioBuffer = await decodeContext.decodeAudioData(arrayBuffer);
+          const mono = audioBufferToMono(audioBuffer);
+          await decodeContext.close();
+
+          state.loadedAudioLabel = file.name;
+          state.inputSampleRate = audioBuffer.sampleRate;
+          state.chunks = [mono];
+          state.totalSamples = mono.length;
+          state.viewportStartSec = 0.0;
+          state.playCursorSec = 0.0;
+          state.followLive = false;
+          state.selectionCenterSec = state.selectionWidthSec / 2;
+
+          elements.followLiveToggle.checked = false;
+          refreshMicrophoneLabel();
+          syncSelectionToViewport();
+          syncControlsToState();
+          updatePanSlider();
+          updateStatus();
+          scheduleRender();
+        } catch (error) {
+          console.error(error);
+          alert(`Audio file load failed: ${error.message}`);
+        } finally {
+          event.target.value = "";
         }
       }
 
@@ -2418,6 +2520,7 @@
         state.playCursorSec = 0.0;
         state.playbackMode = "start";
         state.inputSampleRate = 0;
+        state.loadedAudioLabel = "";
         state.chunks = [];
         state.totalSamples = 0;
         state.analysisRate = 16000;
@@ -2473,7 +2576,7 @@
         const viewport = getViewportBounds();
         const leftX = ((selection.start - viewport.start) / viewport.duration) * rect.width;
         const rightX = ((selection.end - viewport.start) / viewport.duration) * rect.width;
-        const edgeThreshold = 12;
+        const edgeThreshold = 22;
 
         if (Math.abs(x - leftX) <= edgeThreshold) {
           state.dragState = { mode: "resize-left" };
@@ -2615,6 +2718,8 @@
       }
 
       elements.recordButton.addEventListener("click", startMicrophone);
+      elements.uploadAudioButton.addEventListener("click", openAudioUploadPicker);
+      elements.uploadAudioInput.addEventListener("change", handleAudioFileSelected);
       elements.resumeCaptureButton.addEventListener("click", resumeCapture);
       elements.pauseCaptureButton.addEventListener("click", pauseCapture);
       elements.stopCaptureButton.addEventListener("click", stopCapture);
