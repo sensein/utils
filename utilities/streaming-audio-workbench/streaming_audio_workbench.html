@@ -572,6 +572,7 @@
                     <span class="mini-label">Source</span>
                     <select id="playbackModeSelect">
                       <option value="start">Start</option>
+                      <option value="selection">Selection</option>
                       <option value="window">Window</option>
                       <option value="cursor">Cursor</option>
                     </select>
@@ -1099,6 +1100,14 @@
         const totalDuration = totalDurationSec();
         if (totalDuration <= 0) {
           return null;
+        }
+        if (state.playbackMode === "selection") {
+          const selection = getSelectionBounds();
+          return {
+            start: clamp(selection.start, 0, totalDuration),
+            end: clamp(selection.end, 0, totalDuration),
+            label: "selection",
+          };
         }
         if (state.playbackMode === "window") {
           const viewport = getViewportBounds();
