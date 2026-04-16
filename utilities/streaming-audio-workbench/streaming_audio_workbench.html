@@ -501,7 +501,7 @@
         <article class="panel hero-copy">
           <div class="hero-title-row">
             <h1>Streaming Audio Workbench</h1>
-            <span class="version-badge" id="versionLabel">26.04.16-165041</span>
+            <span class="version-badge" id="versionLabel">26.04.16-165704</span>
           </div>
           <p>
             Live microphone analysis with persistent history, waveform plus Hilbert-envelope
@@ -697,6 +697,13 @@
                 </div>
               </div>
               <div class="control">
+                <label class="range-label" for="spectrogramFrameRange">Spectrogram frame</label>
+                <div class="range-with-output">
+                  <input id="spectrogramFrameRange" type="range" min="5" max="50" step="1" value="20" />
+                  <output class="range-output" id="spectrogramFrameOutput">20 ms</output>
+                </div>
+              </div>
+              <div class="control">
                 <label class="range-label" for="windowWidthRange">Selection width</label>
                 <div class="range-with-output">
                   <input id="windowWidthRange" type="range" min="15" max="120" step="1" value="30" />
@@ -775,7 +782,7 @@
     </main>
 
     <script>
-      const buildVersion = "26.04.16-165041";
+      const buildVersion = "26.04.16-165704";
 
       const state = {
         audioContext: null,
@@ -826,6 +833,8 @@
         saveAudioButton: document.getElementById("saveAudioButton"),
         screenshotButton: document.getElementById("screenshotButton"),
         analysisRateSelect: document.getElementById("analysisRateSelect"),
+        spectrogramFrameRange: document.getElementById("spectrogramFrameRange"),
+        spectrogramFrameOutput: document.getElementById("spectrogramFrameOutput"),
         playbackModeSelect: document.getElementById("playbackModeSelect"),
         preemphasisToggle: document.getElementById("preemphasisToggle"),
         followLiveToggle: document.getElementById("followLiveToggle"),
@@ -1011,14 +1020,28 @@
         elements.windowWidthOutput.textContent = `${Math.round(state.selectionWidthSec * 1000)} ms`;
       }
 
+      function updateSpectrogramFrameOutput() {
+        elements.spectrogramFrameOutput.textContent = `${Math.round(state.spectrogramFrameSec * 1000)} ms`;
+      }
+
+      function setSpectrogramFrameLength(frameSec) {
+        const clampedFrameSec = clamp(frameSec, 0.005, 0.05);
+        state.spectrogramFrameSec = clampedFrameSec;
+        state.spectrogramHopSec = Math.max(0.001, clampedFrameSec / 4);
+        elements.spectrogramFrameRange.value = String(Math.round(clampedFrameSec * 1000));
+        updateSpectrogramFrameOutput();
+      }
+
       function syncControlsToState() {
         elements.analysisRateSelect.value = String(state.analysisRate);
         elements.playbackModeSelect.value = state.playbackMode;
         elements.viewDurationSelect.value = String(state.viewDurationSec);
+        elements.spectrogramFrameRange.value = String(Math.round(state.spectrogramFrameSec * 1000));
         elements.windowWidthRange.value = String(Math.round(state.selectionWidthSec * 1000));
         elements.preemphasisToggle.checked = state.usePreemphasis;
         elements.followLiveToggle.checked = state.followLive;
         elements.waveformAutoscaleToggle.checked = state.waveformAutoScale;
+        updateSpectrogramFrameOutput();
         updateWindowWidthOutput();
       }
 
@@ -2624,8 +2647,7 @@
         state.viewportStartSec = 0.0;
         state.selectionCenterSec = 0.015;
         state.selectionWidthSec = 0.03;
-        state.spectrogramFrameSec = 0.02;
-        state.spectrogramHopSec = 0.005;
+        setSpectrogramFrameLength(0.02);
         state.hilbertEnvelopeCutoffHz = 50;
         state.followLive = true;
         state.usePreemphasis = false;
@@ -2843,6 +2865,10 @@
         updatePanSlider();
         scheduleRender();
       });
+      elements.spectrogramFrameRange.addEventListener("input", (event) => {
+        setSpectrogramFrameLength(Number(event.target.value) / 1000);
+        scheduleRender();
+      });
       elements.windowWidthRange.addEventListener("input", (event) => {
         state.selectionWidthSec = Number(event.target.value) / 1000;
         syncSelectionToViewport();
@@ -2877,6 +2903,7 @@
       elements.waveformCanvas.addEventListener("pointercancel", handleWaveformPointerUp);
       elements.spectrogramCanvas.addEventListener("pointerdown", handleSpectrogramPointerDown);
 
+      setSpectrogramFrameLength(state.spectrogramFrameSec);
       syncControlsToState();
       updateEnvironmentInfo();
       refreshMicrophoneLabel();
