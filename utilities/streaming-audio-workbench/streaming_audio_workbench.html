@@ -252,9 +252,21 @@
 
       .transport-row {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: end;
+      }
+
+      .capture-actions {
+        display: flex;
+        flex-wrap: wrap;
         gap: 8px;
-        justify-items: start;
+        align-items: center;
+      }
+
+      .upload-actions {
+        display: flex;
+        justify-content: flex-end;
       }
 
       .action-row {
@@ -489,7 +501,7 @@
         <article class="panel hero-copy">
           <div class="hero-title-row">
             <h1>Streaming Audio Workbench</h1>
-            <span class="version-badge" id="versionLabel">26.04.16-164306</span>
+            <span class="version-badge" id="versionLabel">26.04.16-165041</span>
           </div>
           <p>
             Live microphone analysis with persistent history, waveform plus Hilbert-envelope
@@ -543,51 +555,55 @@
               <div class="control">
                 <label>Audio source</label>
                 <div class="transport-row">
-                  <button
-                    class="primary transport-button icon-with-label transport-record"
-                    id="recordButton"
-                    aria-label="Record"
-                    title="Record"
-                  >
-                    <span class="transport-icon" aria-hidden="true">⏺</span>
-                    <span class="transport-label">Record</span>
-                  </button>
-                  <button
-                    class="secondary transport-button icon-only"
-                    id="pauseCaptureButton"
-                    aria-label="Pause capture"
-                    title="Pause capture"
-                    hidden
-                  >
-                    <span class="transport-icon" aria-hidden="true">⏸</span>
-                  </button>
-                  <button
-                    class="secondary transport-button icon-only"
-                    id="resumeCaptureButton"
-                    aria-label="Resume capture"
-                    title="Resume capture"
-                    hidden
-                  >
-                    <span class="transport-icon" aria-hidden="true">▶</span>
-                  </button>
-                  <button
-                    class="secondary transport-button icon-only"
-                    id="stopCaptureButton"
-                    aria-label="Stop capture"
-                    title="Stop capture"
-                    hidden
-                  >
-                    <span class="transport-icon" aria-hidden="true">⏹</span>
-                  </button>
-                  <button
-                    class="secondary transport-button icon-with-label"
-                    id="uploadAudioButton"
-                    aria-label="Upload audio file"
-                    title="Upload audio file"
-                  >
-                    <span class="transport-icon" aria-hidden="true">⤴</span>
-                    <span class="transport-label">Upload</span>
-                  </button>
+                  <div class="capture-actions">
+                    <button
+                      class="primary transport-button icon-with-label transport-record"
+                      id="recordButton"
+                      aria-label="Record"
+                      title="Record"
+                    >
+                      <span class="transport-icon" aria-hidden="true">⏺</span>
+                      <span class="transport-label">Record</span>
+                    </button>
+                    <button
+                      class="secondary transport-button icon-only"
+                      id="pauseCaptureButton"
+                      aria-label="Pause capture"
+                      title="Pause capture"
+                      hidden
+                    >
+                      <span class="transport-icon" aria-hidden="true">⏸</span>
+                    </button>
+                    <button
+                      class="secondary transport-button icon-only"
+                      id="resumeCaptureButton"
+                      aria-label="Resume capture"
+                      title="Resume capture"
+                      hidden
+                    >
+                      <span class="transport-icon" aria-hidden="true">▶</span>
+                    </button>
+                    <button
+                      class="secondary transport-button icon-only"
+                      id="stopCaptureButton"
+                      aria-label="Stop capture"
+                      title="Stop capture"
+                      hidden
+                    >
+                      <span class="transport-icon" aria-hidden="true">⏹</span>
+                    </button>
+                  </div>
+                  <div class="upload-actions">
+                    <button
+                      class="secondary transport-button icon-with-label"
+                      id="uploadAudioButton"
+                      aria-label="Upload audio file"
+                      title="Upload audio file"
+                    >
+                      <span class="transport-icon" aria-hidden="true">⤴</span>
+                      <span class="transport-label">Upload</span>
+                    </button>
+                  </div>
                 </div>
                 <input id="uploadAudioInput" type="file" accept="audio/*" hidden />
               </div>
@@ -759,7 +775,7 @@
     </main>
 
     <script>
-      const buildVersion = "26.04.16-164306";
+      const buildVersion = "26.04.16-165041";
 
       const state = {
         audioContext: null,
