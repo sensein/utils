@@ -241,6 +241,18 @@
         gap: 8px;
       }
 
+      .playback-row {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .playback-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+      }
+
       .transport-button {
         display: inline-flex;
         align-items: center;
@@ -410,6 +422,10 @@
         .action-row {
           grid-template-columns: 1fr;
         }
+
+        .playback-row {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -489,7 +505,7 @@
                   </button>
                   <button
                     class="secondary transport-button icon-only"
-                    id="playButton"
+                    id="resumeCaptureButton"
                     aria-label="Resume capture"
                     title="Resume capture"
                     hidden
@@ -498,13 +514,54 @@
                   </button>
                   <button
                     class="secondary transport-button icon-only"
-                    id="stopButton"
+                    id="stopCaptureButton"
                     aria-label="Stop capture"
                     title="Stop capture"
                     hidden
                   >
                     <span class="transport-icon" aria-hidden="true">⏹</span>
                   </button>
+                </div>
+              </div>
+              <div class="control">
+                <label>Playback</label>
+                <div class="playback-row">
+                  <div class="mini-field">
+                    <span class="mini-label">Source</span>
+                    <select id="playbackModeSelect">
+                      <option value="start">From start</option>
+                      <option value="window">Window</option>
+                      <option value="cursor">Cursor</option>
+                    </select>
+                  </div>
+                  <div class="playback-actions">
+                    <button
+                      class="secondary transport-button icon-only"
+                      id="playButton"
+                      aria-label="Play buffered audio"
+                      title="Play buffered audio"
+                    >
+                      <span class="transport-icon" aria-hidden="true">▶</span>
+                    </button>
+                    <button
+                      class="secondary transport-button icon-only"
+                      id="pausePlaybackButton"
+                      aria-label="Pause playback"
+                      title="Pause playback"
+                      hidden
+                    >
+                      <span class="transport-icon" aria-hidden="true">⏸</span>
+                    </button>
+                    <button
+                      class="secondary transport-button icon-only"
+                      id="stopPlaybackButton"
+                      aria-label="Stop playback"
+                      title="Stop playback"
+                      hidden
+                    >
+                      <span class="transport-icon" aria-hidden="true">⏹</span>
+                    </button>
+                  </div>
                 </div>
               </div>
               <div class="control">
@@ -591,7 +648,7 @@
             <strong>Notes:</strong> microphone capture requires permission and may need a secure
             context such as <code>http://localhost</code>. The waveform keeps the full buffered
             history in memory so you can pause, pan backward, and revisit older slices without
-            losing the stream.
+            losing the stream. Click the waveform or spectrogram to place the playback cursor.
           </section>
         </aside>
 
@@ -639,15 +696,21 @@
         mediaStream: null,
         sourceNode: null,
         captureNode: null,
+        playbackAudioContext: null,
+        playbackSource: null,
         usingWorklet: false,
         isStarted: false,
         isPaused: false,
+        isPlayingBack: false,
+        isPlaybackPaused: false,
         inputSampleRate: 0,
         chunks: [],
         totalSamples: 0,
         analysisRate: 16000,
+        playbackMode: "start",
         viewDurationSec: 6.0,
         viewportStartSec: 0.0,
+        playCursorSec: 0.0,
         selectionCenterSec: 0.5,
         selectionWidthSec: 0.03,
         spectrogramFrameSec: 0.02,
@@ -665,12 +728,16 @@
       const elements = {
         recordButton: document.getElementById("recordButton"),
         playButton: document.getElementById("playButton"),
+        resumeCaptureButton: document.getElementById("resumeCaptureButton"),
         pauseCaptureButton: document.getElementById("pauseCaptureButton"),
-        stopButton: document.getElementById("stopButton"),
+        stopCaptureButton: document.getElementById("stopCaptureButton"),
+        pausePlaybackButton: document.getElementById("pausePlaybackButton"),
+        stopPlaybackButton: document.getElementById("stopPlaybackButton"),
         resetButton: document.getElementById("resetButton"),
         saveAudioButton: document.getElementById("saveAudioButton"),
         screenshotButton: document.getElementById("screenshotButton"),
         analysisRateSelect: document.getElementById("analysisRateSelect"),
+        playbackModeSelect: document.getElementById("playbackModeSelect"),
         preemphasisToggle: document.getElementById("preemphasisToggle"),
         followLiveToggle: document.getElementById("followLiveToggle"),
         waveformAutoscaleToggle: document.getElementById("waveformAutoscaleToggle"),
@@ -820,14 +887,24 @@
         }
 
         updateTransportControls();
+        updatePlaybackControls();
       }
 
       function updateTransportControls() {
         const hasCapture = state.isStarted;
         elements.recordButton.hidden = hasCapture;
         elements.pauseCaptureButton.hidden = !hasCapture || state.isPaused;
-        elements.playButton.hidden = !hasCapture || !state.isPaused;
-        elements.stopButton.hidden = !hasCapture;
+        elements.resumeCaptureButton.hidden = !hasCapture || !state.isPaused;
+        elements.stopCaptureButton.hidden = !hasCapture;
+      }
+
+      function updatePlaybackControls() {
+        const hasBufferedAudio = totalDurationSec() > 0;
+        elements.playButton.hidden = state.isPlayingBack && !state.isPlaybackPaused;
+        elements.pausePlaybackButton.hidden = !state.isPlayingBack || state.isPlaybackPaused;
+        elements.stopPlaybackButton.hidden = !state.isPlayingBack;
+        elements.playButton.disabled = !hasBufferedAudio;
+        elements.playbackModeSelect.disabled = !hasBufferedAudio;
       }
 
       function updateWindowWidthOutput() {
@@ -836,6 +913,7 @@
 
       function syncControlsToState() {
         elements.analysisRateSelect.value = String(state.analysisRate);
+        elements.playbackModeSelect.value = state.playbackMode;
         elements.viewDurationSelect.value = String(state.viewDurationSec);
         elements.windowWidthRange.value = String(Math.round(state.selectionWidthSec * 1000));
         elements.preemphasisToggle.checked = state.usePreemphasis;
@@ -848,6 +926,7 @@
         const totalDuration = totalDurationSec();
         if (totalDuration <= 0) {
           state.viewportStartSec = 0.0;
+          state.playCursorSec = 0.0;
           state.selectionCenterSec = state.selectionWidthSec / 2;
           return;
         }
@@ -858,6 +937,7 @@
         const minCenter = state.viewportStartSec + state.selectionWidthSec / 2;
         const maxCenter = Math.max(minCenter, viewportEnd - state.selectionWidthSec / 2);
         state.selectionCenterSec = clamp(state.selectionCenterSec, minCenter, maxCenter);
+        state.playCursorSec = clamp(state.playCursorSec, 0, totalDuration);
       }
 
       function updatePanSlider() {
@@ -881,7 +961,7 @@
       function describeViewport() {
         const viewport = getViewportBounds();
         elements.waveformSubtitle.textContent =
-          `Viewport ${viewport.start.toFixed(2)}-${viewport.end.toFixed(2)} s with |x + jH{x}| low-passed at ${state.hilbertEnvelopeCutoffHz} Hz${state.waveformAutoScale ? ", autoscaled" : ", fixed +/-1 scale"}`;
+          `Viewport ${viewport.start.toFixed(2)}-${viewport.end.toFixed(2)} s with |x + jH{x}| low-passed at ${state.hilbertEnvelopeCutoffHz} Hz${state.waveformAutoScale ? ", autoscaled" : ", fixed +/-1 scale"}; cursor ${state.playCursorSec.toFixed(2)} s`;
         elements.spectrogramSubtitle.textContent =
           `${state.analysisRate / 1000} kHz analysis, ${Math.round(state.spectrogramFrameSec * 1000)} ms frame, ${Math.round(state.spectrogramHopSec * 1000)} ms hop${state.usePreemphasis ? ", preemphasis on" : ""}`;
       }
@@ -961,6 +1041,122 @@
         const startSample = Math.floor(startSec * state.inputSampleRate);
         const endSample = Math.ceil(endSec * state.inputSampleRate);
         return extractSamples(startSample, endSample);
+      }
+
+      function getPlaybackRange() {
+        const totalDuration = totalDurationSec();
+        if (totalDuration <= 0) {
+          return null;
+        }
+        if (state.playbackMode === "window") {
+          const viewport = getViewportBounds();
+          return {
+            start: viewport.start,
+            end: viewport.end,
+            label: "window",
+          };
+        }
+        if (state.playbackMode === "cursor") {
+          const start = clamp(state.playCursorSec, 0, totalDuration);
+          return {
+            start,
+            end: totalDuration,
+            label: "cursor",
+          };
+        }
+        return {
+          start: 0,
+          end: totalDuration,
+          label: "start",
+        };
+      }
+
+      async function stopPlayback() {
+        const source = state.playbackSource;
+        if (source) {
+          source.onended = null;
+          try {
+            source.stop();
+          } catch (error) {
+            console.warn("Playback source stop failed.", error);
+          }
+          try {
+            source.disconnect();
+          } catch (error) {
+            console.warn("Playback source disconnect failed.", error);
+          }
+        }
+        if (state.playbackAudioContext) {
+          try {
+            await state.playbackAudioContext.close();
+          } catch (error) {
+            console.warn("Playback AudioContext close failed.", error);
+          }
+        }
+        state.playbackAudioContext = null;
+        state.playbackSource = null;
+        state.isPlayingBack = false;
+        state.isPlaybackPaused = false;
+        updatePlaybackControls();
+        scheduleRender();
+      }
+
+      async function pausePlayback() {
+        if (!state.isPlayingBack || state.isPlaybackPaused || !state.playbackAudioContext) {
+          return;
+        }
+        await state.playbackAudioContext.suspend();
+        state.isPlaybackPaused = true;
+        updatePlaybackControls();
+        scheduleRender();
+      }
+
+      async function playBufferedAudio() {
+        if (state.isPlayingBack && state.isPlaybackPaused && state.playbackAudioContext) {
+          await state.playbackAudioContext.resume();
+          state.isPlaybackPaused = false;
+          updatePlaybackControls();
+          scheduleRender();
+          return;
+        }
+        if (state.isPlayingBack) {
+          return;
+        }
+
+        const playbackRange = getPlaybackRange();
+        if (!playbackRange) {
+          alert("No buffered audio is available for playback yet.");
+          return;
+        }
+
+        const samples = extractSegment(playbackRange.start, playbackRange.end);
+        if (!samples.length || playbackRange.end - playbackRange.start < 1e-3) {
+          alert("The selected playback range is empty. Move the cursor or capture more audio.");
+          return;
+        }
+
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        const playbackAudioContext = new AudioContextClass();
+        await playbackAudioContext.resume();
+
+        const buffer = playbackAudioContext.createBuffer(1, samples.length, state.inputSampleRate);
+        buffer.copyToChannel(samples, 0);
+        const source = playbackAudioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(playbackAudioContext.destination);
+        source.onended = async () => {
+          if (state.playbackSource === source && !state.isPlaybackPaused) {
+            await stopPlayback();
+          }
+        };
+
+        state.playbackAudioContext = playbackAudioContext;
+        state.playbackSource = source;
+        state.isPlayingBack = true;
+        state.isPlaybackPaused = false;
+        source.start();
+        updatePlaybackControls();
+        scheduleRender();
       }
 
       function makeTimestampLabel() {
@@ -1680,6 +1876,31 @@
         ctx.restore();
       }
 
+      function drawCursorOverlay(ctx, canvas, cursorSec) {
+        const viewport = getViewportBounds();
+        if (cursorSec < viewport.start || cursorSec > viewport.end) {
+          return;
+        }
+        const x = ((cursorSec - viewport.start) / viewport.duration) * canvas.width;
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 231, 166, 0.96)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(255, 231, 166, 0.98)";
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x - 7, 12);
+        ctx.lineTo(x + 7, 12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
       function drawWaveform(signal, envelope, envelopeRate) {
         const canvas = elements.waveformCanvas;
         const ctx = canvas.getContext("2d");
@@ -1756,10 +1977,11 @@
 
         const selection = getSelectionBounds();
         drawSelectionOverlay(ctx, canvas, selection.start, selection.end);
+        drawCursorOverlay(ctx, canvas, state.playCursorSec);
 
         ctx.fillStyle = "rgba(255, 245, 230, 0.9)";
         ctx.font = '13px "Avenir Next", "Segoe UI", sans-serif';
-        ctx.fillText("Drag inside the highlight to move it; drag an edge to resize.", 18, 24);
+        ctx.fillText("Drag the highlight to inspect; click to move the cursor for playback.", 18, 24);
       }
 
       function drawSpectrogram(spectrogram, selectionStartSec, selectionEndSec) {
@@ -1804,6 +2026,7 @@
         ctx.putImageData(imageData, 0, 0);
 
         drawSelectionOverlay(ctx, canvas, selectionStartSec, selectionEndSec);
+        drawCursorOverlay(ctx, canvas, state.playCursorSec);
 
         ctx.fillStyle = "rgba(255, 245, 230, 0.9)";
         ctx.font = '13px "Avenir Next", "Segoe UI", sans-serif';
@@ -2073,6 +2296,7 @@
         if (state.isStarted) {
           return;
         }
+        await stopPlayback();
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           alert("This browser does not support microphone capture via navigator.mediaDevices.getUserMedia.");
@@ -2187,9 +2411,12 @@
 
       async function resetEverything() {
         state.dragState = null;
+        await stopPlayback();
         await releaseCaptureResources();
         state.isStarted = false;
         state.isPaused = false;
+        state.playCursorSec = 0.0;
+        state.playbackMode = "start";
         state.inputSampleRate = 0;
         state.chunks = [];
         state.totalSamples = 0;
@@ -2240,6 +2467,8 @@
         const canvas = elements.waveformCanvas;
         const rect = canvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
+        const pointerTime = timeAtCanvasX(canvas, event.clientX);
+        state.playCursorSec = pointerTime;
         const selection = getSelectionBounds();
         const viewport = getViewportBounds();
         const leftX = ((selection.start - viewport.start) / viewport.duration) * rect.width;
@@ -2251,7 +2480,6 @@
         } else if (Math.abs(x - rightX) <= edgeThreshold) {
           state.dragState = { mode: "resize-right" };
         } else if (x >= leftX && x <= rightX) {
-          const pointerTime = timeAtCanvasX(canvas, event.clientX);
           state.dragState = {
             mode: "move",
             offsetSec: pointerTime - state.selectionCenterSec,
@@ -2310,7 +2538,8 @@
         }
         state.followLive = false;
         elements.followLiveToggle.checked = false;
-        state.selectionCenterSec = timeAtCanvasX(elements.spectrogramCanvas, event.clientX);
+        state.playCursorSec = timeAtCanvasX(elements.spectrogramCanvas, event.clientX);
+        state.selectionCenterSec = state.playCursorSec;
         syncSelectionToViewport();
         updateStatus();
         scheduleRender();
@@ -2386,14 +2615,21 @@
       }
 
       elements.recordButton.addEventListener("click", startMicrophone);
-      elements.playButton.addEventListener("click", resumeCapture);
+      elements.resumeCaptureButton.addEventListener("click", resumeCapture);
       elements.pauseCaptureButton.addEventListener("click", pauseCapture);
-      elements.stopButton.addEventListener("click", stopCapture);
+      elements.stopCaptureButton.addEventListener("click", stopCapture);
+      elements.playButton.addEventListener("click", playBufferedAudio);
+      elements.pausePlaybackButton.addEventListener("click", pausePlayback);
+      elements.stopPlaybackButton.addEventListener("click", stopPlayback);
       elements.resetButton.addEventListener("click", resetEverything);
       elements.saveAudioButton.addEventListener("click", exportBufferedAudioAsWav);
       elements.screenshotButton.addEventListener("click", capturePageScreenshot);
       elements.analysisRateSelect.addEventListener("change", (event) => {
         state.analysisRate = Number(event.target.value);
+        scheduleRender();
+      });
+      elements.playbackModeSelect.addEventListener("change", (event) => {
+        state.playbackMode = event.target.value;
         scheduleRender();
       });
       elements.viewDurationSelect.addEventListener("change", (event) => {
