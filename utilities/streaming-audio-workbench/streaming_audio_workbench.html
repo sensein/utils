@@ -34,17 +34,17 @@
       }
 
       .page {
-        max-width: 1400px;
+        max-width: 1520px;
         margin: 0 auto;
-        padding: 32px 20px 44px;
+        padding: 24px 18px 34px;
       }
 
       .hero {
         display: grid;
-        grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
-        gap: 18px;
+        grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr);
+        gap: 14px;
         align-items: start;
-        margin-bottom: 20px;
+        margin-bottom: 14px;
       }
 
       .panel {
@@ -56,7 +56,7 @@
       }
 
       .hero-copy {
-        padding: 24px 26px 18px;
+        padding: 20px 22px 16px;
       }
 
       h1 {
@@ -76,18 +76,18 @@
       }
 
       .status-card {
-        padding: 22px;
+        padding: 18px;
       }
 
       .status-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
-        margin-top: 16px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 12px;
       }
 
       .metric {
-        padding: 12px 14px;
+        padding: 10px 12px;
         border-radius: 16px;
         background: rgba(255, 255, 255, 0.56);
       }
@@ -103,12 +103,16 @@
       .metric-value {
         display: block;
         margin-top: 4px;
-        font-size: 1.05rem;
+        font-size: 0.98rem;
         font-weight: 600;
       }
 
+      .metric-wide {
+        grid-column: 1 / -1;
+      }
+
       .controls {
-        padding: 18px;
+        padding: 16px;
       }
 
       .sidebar-stack {
@@ -119,7 +123,7 @@
 
       .workspace {
         display: grid;
-        grid-template-columns: minmax(270px, 320px) minmax(0, 1fr);
+        grid-template-columns: minmax(248px, 296px) minmax(0, 1fr);
         gap: 16px;
         align-items: start;
       }
@@ -132,7 +136,7 @@
       .control-grid {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 12px;
+        gap: 10px;
       }
 
       .control {
@@ -181,6 +185,10 @@
         opacity: 0.55;
       }
 
+      [hidden] {
+        display: none !important;
+      }
+
       .primary {
         background: linear-gradient(135deg, #be5736, #9d3920);
         color: #fff7f4;
@@ -189,6 +197,41 @@
 
       .secondary {
         background: rgba(255, 255, 255, 0.74);
+      }
+
+      .transport-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .action-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .transport-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 46px;
+        padding: 10px 12px;
+      }
+
+      .transport-icon {
+        font-size: 1rem;
+        line-height: 1;
+      }
+
+      .icon-only {
+        gap: 0;
+        padding: 10px;
+      }
+
+      .icon-only .transport-icon {
+        font-size: 1.08rem;
       }
 
       .toggle {
@@ -226,10 +269,14 @@
 
       .pan-row {
         display: grid;
-        grid-template-columns: auto auto minmax(0, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
-        margin-top: 14px;
+        margin-top: 10px;
         align-items: center;
+      }
+
+      .pan-row input[type="range"] {
+        grid-column: 1 / -1;
       }
 
       .plots {
@@ -281,7 +328,6 @@
       }
 
       .help {
-        margin-top: 18px;
         padding: 16px 18px;
         color: var(--muted);
         line-height: 1.5;
@@ -298,11 +344,23 @@
           grid-template-columns: 1fr;
         }
 
+        .status-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
         .workspace .sidebar-stack {
           position: static;
         }
 
         .pan-row {
+          grid-template-columns: 1fr;
+        }
+
+        .transport-row {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .action-row {
           grid-template-columns: 1fr;
         }
       }
@@ -346,7 +404,7 @@
               <span class="metric-label">OS</span>
               <span class="metric-value" id="osLabel">Detecting...</span>
             </div>
-            <div class="metric">
+            <div class="metric metric-wide">
               <span class="metric-label">Microphone</span>
               <span class="metric-value" id="microphoneLabel">Not connected</span>
             </div>
@@ -359,12 +417,44 @@
           <section class="panel controls">
             <div class="control-grid">
               <div class="control">
-                <label>Capture</label>
-                <button class="primary" id="startButton">Start microphone</button>
-              </div>
-              <div class="control">
-                <label>Pause / Resume</label>
-                <button class="secondary" id="pauseButton" disabled>Pause capture</button>
+                <label>Transport</label>
+                <div class="transport-row">
+                  <button
+                    class="primary transport-button icon-only"
+                    id="recordButton"
+                    aria-label="Record"
+                    title="Record"
+                  >
+                    <span class="transport-icon" aria-hidden="true">⏺</span>
+                  </button>
+                  <button
+                    class="secondary transport-button icon-only"
+                    id="pauseCaptureButton"
+                    aria-label="Pause capture"
+                    title="Pause capture"
+                    hidden
+                  >
+                    <span class="transport-icon" aria-hidden="true">⏸</span>
+                  </button>
+                  <button
+                    class="secondary transport-button icon-only"
+                    id="playButton"
+                    aria-label="Resume capture"
+                    title="Resume capture"
+                    hidden
+                  >
+                    <span class="transport-icon" aria-hidden="true">▶</span>
+                  </button>
+                  <button
+                    class="secondary transport-button icon-only"
+                    id="stopButton"
+                    aria-label="Stop capture"
+                    title="Stop capture"
+                    hidden
+                  >
+                    <span class="transport-icon" aria-hidden="true">⏹</span>
+                  </button>
+                </div>
               </div>
               <div class="control">
                 <label>Buffer</label>
@@ -375,12 +465,21 @@
                 <button class="secondary" id="resetButton">Reset everything</button>
               </div>
               <div class="control">
-                <label>Save audio</label>
-                <button class="secondary" id="saveAudioButton">Download WAV</button>
-              </div>
-              <div class="control">
-                <label>Capture page</label>
-                <button class="secondary" id="screenshotButton">Save PNG snapshot</button>
+                <label>Exports</label>
+                <div class="action-row">
+                  <button class="secondary transport-button" id="saveAudioButton" aria-label="Download WAV">
+                    <span class="transport-icon" aria-hidden="true">⬇</span>
+                    <span>WAV</span>
+                  </button>
+                  <button
+                    class="secondary transport-button"
+                    id="screenshotButton"
+                    aria-label="Save PNG snapshot"
+                  >
+                    <span class="transport-icon" aria-hidden="true">📷</span>
+                    <span>PNG</span>
+                  </button>
+                </div>
               </div>
               <div class="pan-row">
                 <button class="secondary" id="panLeftButton">Pan left</button>
@@ -512,8 +611,10 @@
       };
 
       const elements = {
-        startButton: document.getElementById("startButton"),
-        pauseButton: document.getElementById("pauseButton"),
+        recordButton: document.getElementById("recordButton"),
+        playButton: document.getElementById("playButton"),
+        pauseCaptureButton: document.getElementById("pauseCaptureButton"),
+        stopButton: document.getElementById("stopButton"),
         clearButton: document.getElementById("clearButton"),
         resetButton: document.getElementById("resetButton"),
         saveAudioButton: document.getElementById("saveAudioButton"),
@@ -657,13 +758,25 @@
         const selectionEnd = selectionStart + state.selectionWidthSec;
         elements.selectionLabel.textContent = `${selectionStart.toFixed(2)}-${selectionEnd.toFixed(2)} s`;
 
-        if (!state.isStarted) {
+        if (!state.isStarted && totalDuration > 0) {
+          elements.statusLabel.textContent = "Stopped";
+        } else if (!state.isStarted) {
           elements.statusLabel.textContent = "Idle";
         } else if (state.isPaused) {
           elements.statusLabel.textContent = "Paused";
         } else {
           elements.statusLabel.textContent = "Recording";
         }
+
+        updateTransportControls();
+      }
+
+      function updateTransportControls() {
+        const hasCapture = state.isStarted;
+        elements.recordButton.hidden = hasCapture;
+        elements.pauseCaptureButton.hidden = !hasCapture || state.isPaused;
+        elements.playButton.hidden = !hasCapture || !state.isPaused;
+        elements.stopButton.hidden = !hasCapture;
       }
 
       function updateWindowWidthOutput() {
@@ -1943,8 +2056,6 @@
           state.inputSampleRate = audioContext.sampleRate;
           state.isStarted = true;
           state.isPaused = false;
-          elements.pauseButton.disabled = false;
-          elements.startButton.disabled = true;
           refreshMicrophoneLabel();
           updateStatus();
           scheduleRender();
@@ -1954,13 +2065,73 @@
         }
       }
 
-      function togglePause() {
+      function pauseCapture() {
         if (!state.isStarted) {
           return;
         }
-        state.isPaused = !state.isPaused;
-        elements.pauseButton.textContent = state.isPaused ? "Resume capture" : "Pause capture";
+        state.isPaused = true;
         updateStatus();
+      }
+
+      function resumeCapture() {
+        if (!state.isStarted) {
+          return;
+        }
+        state.isPaused = false;
+        updateStatus();
+      }
+
+      async function releaseCaptureResources() {
+        if (state.captureNode) {
+          try {
+            if (state.usingWorklet && state.captureNode.port) {
+              state.captureNode.port.onmessage = null;
+            }
+            state.captureNode.disconnect();
+          } catch (error) {
+            console.warn("Capture node disconnect failed during stop/reset.", error);
+          }
+        }
+
+        if (state.sourceNode) {
+          try {
+            state.sourceNode.disconnect();
+          } catch (error) {
+            console.warn("Source node disconnect failed during stop/reset.", error);
+          }
+        }
+
+        if (state.mediaStream) {
+          for (const track of state.mediaStream.getTracks()) {
+            track.stop();
+          }
+        }
+
+        if (state.audioContext) {
+          try {
+            await state.audioContext.close();
+          } catch (error) {
+            console.warn("AudioContext close failed during stop/reset.", error);
+          }
+        }
+
+        state.audioContext = null;
+        state.mediaStream = null;
+        state.sourceNode = null;
+        state.captureNode = null;
+        state.usingWorklet = false;
+      }
+
+      async function stopCapture() {
+        if (!state.isStarted) {
+          return;
+        }
+        await releaseCaptureResources();
+        state.isStarted = false;
+        state.isPaused = false;
+        refreshMicrophoneLabel();
+        updateStatus();
+        scheduleRender();
       }
 
       function clearHistory() {
@@ -1975,45 +2146,7 @@
 
       async function resetEverything() {
         state.dragState = null;
-
-        if (state.captureNode) {
-          try {
-            if (state.usingWorklet && state.captureNode.port) {
-              state.captureNode.port.onmessage = null;
-            }
-            state.captureNode.disconnect();
-          } catch (error) {
-            console.warn("Capture node disconnect failed during reset.", error);
-          }
-        }
-
-        if (state.sourceNode) {
-          try {
-            state.sourceNode.disconnect();
-          } catch (error) {
-            console.warn("Source node disconnect failed during reset.", error);
-          }
-        }
-
-        if (state.mediaStream) {
-          for (const track of state.mediaStream.getTracks()) {
-            track.stop();
-          }
-        }
-
-        if (state.audioContext) {
-          try {
-            await state.audioContext.close();
-          } catch (error) {
-            console.warn("AudioContext close failed during reset.", error);
-          }
-        }
-
-        state.audioContext = null;
-        state.mediaStream = null;
-        state.sourceNode = null;
-        state.captureNode = null;
-        state.usingWorklet = false;
+        await releaseCaptureResources();
         state.isStarted = false;
         state.isPaused = false;
         state.inputSampleRate = 0;
@@ -2033,10 +2166,6 @@
         state.renderScheduled = false;
         state.isRendering = false;
         state.needsAnotherRender = false;
-
-        elements.startButton.disabled = false;
-        elements.pauseButton.disabled = true;
-        elements.pauseButton.textContent = "Pause capture";
 
         refreshMicrophoneLabel();
         syncSelectionToViewport();
@@ -2215,8 +2344,10 @@
         }
       }
 
-      elements.startButton.addEventListener("click", startMicrophone);
-      elements.pauseButton.addEventListener("click", togglePause);
+      elements.recordButton.addEventListener("click", startMicrophone);
+      elements.playButton.addEventListener("click", resumeCapture);
+      elements.pauseCaptureButton.addEventListener("click", pauseCapture);
+      elements.stopButton.addEventListener("click", stopCapture);
       elements.clearButton.addEventListener("click", clearHistory);
       elements.resetButton.addEventListener("click", resetEverything);
       elements.saveAudioButton.addEventListener("click", exportBufferedAudioAsWav);
