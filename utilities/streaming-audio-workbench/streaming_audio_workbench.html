@@ -501,7 +501,7 @@
         <article class="panel hero-copy">
           <div class="hero-title-row">
             <h1>Streaming Audio Workbench</h1>
-            <span class="version-badge" id="versionLabel">26.04.16-165704</span>
+            <span class="version-badge" id="versionLabel">26.04.16-170609</span>
           </div>
           <p>
             Live microphone analysis with persistent history, waveform plus Hilbert-envelope
@@ -782,7 +782,7 @@
     </main>
 
     <script>
-      const buildVersion = "26.04.16-165704";
+      const buildVersion = "26.04.16-170609";
 
       const state = {
         audioContext: null,
@@ -2681,52 +2681,101 @@
         return viewport.start + ratio * viewport.duration;
       }
 
-      function handleWaveformPointerDown(event) {
-        if (!state.totalSamples) {
-          return;
-        }
-        const canvas = elements.waveformCanvas;
+      function getSelectionPointerInteraction(canvas, clientX) {
         const rect = canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const pointerTime = timeAtCanvasX(canvas, event.clientX);
-        state.playCursorSec = pointerTime;
+        const x = clientX - rect.left;
+        const pointerTime = timeAtCanvasX(canvas, clientX);
         const selection = getSelectionBounds();
         const viewport = getViewportBounds();
         const leftX = ((selection.start - viewport.start) / viewport.duration) * rect.width;
         const rightX = ((selection.end - viewport.start) / viewport.duration) * rect.width;
         const edgeThreshold = 22;
+        const cursorX = ((state.playCursorSec - viewport.start) / viewport.duration) * rect.width;
+        const cursorThreshold = 14;
 
         if (Math.abs(x - leftX) <= edgeThreshold) {
-          state.dragState = { mode: "resize-left" };
-        } else if (Math.abs(x - rightX) <= edgeThreshold) {
-          state.dragState = { mode: "resize-right" };
-        } else if (x >= leftX && x <= rightX) {
-          state.dragState = {
+          return { mode: "resize-left", offsetSec: 0, pointerTime, plainClick: false };
+        }
+        if (Math.abs(x - rightX) <= edgeThreshold) {
+          return { mode: "resize-right", offsetSec: 0, pointerTime, plainClick: false };
+        }
+        if (
+          state.playCursorSec >= viewport.start &&
+          state.playCursorSec <= viewport.end &&
+          Math.abs(x - cursorX) <= cursorThreshold
+        ) {
+          return {
+            mode: "move-cursor",
+            offsetSec: pointerTime - state.playCursorSec,
+            centerOffsetSec: state.selectionCenterSec - state.playCursorSec,
+            pointerTime,
+            plainClick: false,
+          };
+        }
+        if (x >= leftX && x <= rightX) {
+          return {
             mode: "move",
             offsetSec: pointerTime - state.selectionCenterSec,
+            cursorOffsetSec: state.playCursorSec - state.selectionCenterSec,
+            pointerTime,
+            plainClick: false,
           };
-        } else {
-          state.dragState = { mode: "move", offsetSec: 0 };
-          state.selectionCenterSec = timeAtCanvasX(canvas, event.clientX);
+        }
+        return { mode: "move", offsetSec: 0, pointerTime, plainClick: true };
+      }
+
+      function beginSelectionDrag(canvas, event) {
+        if (!state.totalSamples) {
+          return;
+        }
+        const interaction = getSelectionPointerInteraction(canvas, event.clientX);
+        state.dragState = {
+          mode: interaction.mode,
+          offsetSec: interaction.offsetSec,
+          canvasId: canvas.id,
+          centerOffsetSec: interaction.centerOffsetSec ?? 0,
+          cursorOffsetSec: interaction.cursorOffsetSec ?? 0,
+          startClientX: event.clientX,
+          startPointerTime: interaction.pointerTime,
+          moved: false,
+        };
+
+        if (interaction.plainClick) {
+          state.playCursorSec = interaction.pointerTime;
+          state.selectionCenterSec = interaction.pointerTime;
+          state.dragState = null;
+          syncSelectionToViewport();
+          updateStatus();
+          scheduleRender();
+          return;
         }
 
         state.followLive = false;
         elements.followLiveToggle.checked = false;
         syncSelectionToViewport();
         canvas.setPointerCapture(event.pointerId);
+        updateStatus();
         scheduleRender();
       }
 
-      function handleWaveformPointerMove(event) {
-        if (!state.dragState) {
+      function updateSelectionDrag(canvas, event) {
+        if (!state.dragState || state.dragState.canvasId !== canvas.id) {
           return;
         }
-        const pointerTime = timeAtCanvasX(elements.waveformCanvas, event.clientX);
+        const movedPixels = Math.abs(event.clientX - state.dragState.startClientX);
+        if (movedPixels > 4) {
+          state.dragState.moved = true;
+        }
+        const pointerTime = timeAtCanvasX(canvas, event.clientX);
         const minWidth = 0.015;
         const selection = getSelectionBounds();
 
         if (state.dragState.mode === "move") {
           state.selectionCenterSec = pointerTime - state.dragState.offsetSec;
+          state.playCursorSec = state.selectionCenterSec + state.dragState.cursorOffsetSec;
+        } else if (state.dragState.mode === "move-cursor") {
+          state.playCursorSec = pointerTime - state.dragState.offsetSec;
+          state.selectionCenterSec = state.playCursorSec + state.dragState.centerOffsetSec;
         } else if (state.dragState.mode === "resize-left") {
           const newStart = clamp(pointerTime, state.viewportStartSec, selection.end - minWidth);
           state.selectionCenterSec = (newStart + selection.end) / 2;
@@ -2745,25 +2794,46 @@
         scheduleRender();
       }
 
-      function handleWaveformPointerUp(event) {
-        if (!state.dragState) {
+      function endSelectionDrag(canvas, event) {
+        if (!state.dragState || state.dragState.canvasId !== canvas.id) {
           return;
         }
-        elements.waveformCanvas.releasePointerCapture(event.pointerId);
+        if (state.dragState.mode === "move" && !state.dragState.moved) {
+          const pointerTime = timeAtCanvasX(canvas, event.clientX);
+          state.playCursorSec = pointerTime;
+          state.selectionCenterSec = pointerTime;
+          syncSelectionToViewport();
+          updateStatus();
+          scheduleRender();
+        }
+        if (canvas.hasPointerCapture && canvas.hasPointerCapture(event.pointerId)) {
+          canvas.releasePointerCapture(event.pointerId);
+        }
         state.dragState = null;
       }
 
+      function handleWaveformPointerDown(event) {
+        beginSelectionDrag(elements.waveformCanvas, event);
+      }
+
+      function handleWaveformPointerMove(event) {
+        updateSelectionDrag(elements.waveformCanvas, event);
+      }
+
+      function handleWaveformPointerUp(event) {
+        endSelectionDrag(elements.waveformCanvas, event);
+      }
+
       function handleSpectrogramPointerDown(event) {
-        if (!state.totalSamples) {
-          return;
-        }
-        state.followLive = false;
-        elements.followLiveToggle.checked = false;
-        state.playCursorSec = timeAtCanvasX(elements.spectrogramCanvas, event.clientX);
-        state.selectionCenterSec = state.playCursorSec;
-        syncSelectionToViewport();
-        updateStatus();
-        scheduleRender();
+        beginSelectionDrag(elements.spectrogramCanvas, event);
+      }
+
+      function handleSpectrogramPointerMove(event) {
+        updateSelectionDrag(elements.spectrogramCanvas, event);
+      }
+
+      function handleSpectrogramPointerUp(event) {
+        endSelectionDrag(elements.spectrogramCanvas, event);
       }
 
       async function renderAll() {
@@ -2902,6 +2972,9 @@
       elements.waveformCanvas.addEventListener("pointerup", handleWaveformPointerUp);
       elements.waveformCanvas.addEventListener("pointercancel", handleWaveformPointerUp);
       elements.spectrogramCanvas.addEventListener("pointerdown", handleSpectrogramPointerDown);
+      elements.spectrogramCanvas.addEventListener("pointermove", handleSpectrogramPointerMove);
+      elements.spectrogramCanvas.addEventListener("pointerup", handleSpectrogramPointerUp);
+      elements.spectrogramCanvas.addEventListener("pointercancel", handleSpectrogramPointerUp);
 
       setSpectrogramFrameLength(state.spectrogramFrameSec);
       syncControlsToState();
