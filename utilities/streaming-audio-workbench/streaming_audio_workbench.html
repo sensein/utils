@@ -92,7 +92,6 @@
 
       .hero-copy p {
         margin: 0;
-        max-width: 62ch;
         color: var(--muted);
         line-height: 1.55;
       }
@@ -501,13 +500,14 @@
         <article class="panel hero-copy">
           <div class="hero-title-row">
             <h1>Streaming Audio Workbench</h1>
-            <span class="version-badge" id="versionLabel">26.04.16-170609</span>
+            <span class="version-badge" id="versionLabel">26.04.17-121438</span>
           </div>
           <p>
             Live microphone analysis with persistent history, waveform plus Hilbert-envelope
             overlay, a synced spectrogram window, and focused spectrum and MFCC views for the
             selected slice. Drag the highlighted window in the waveform to move it, or drag its
-            edges to change width.
+            edges to change width. This development was supported by NIH Bridge2AI Precision
+            Public Health Grand Challenge project, the MGAIC consortium, and the ReadNet project.
           </p>
         </article>
         <aside class="panel status-card">
@@ -782,7 +782,7 @@
     </main>
 
     <script>
-      const buildVersion = "26.04.16-170609";
+      const buildVersion = "26.04.17-121438";
 
       const state = {
         audioContext: null,
