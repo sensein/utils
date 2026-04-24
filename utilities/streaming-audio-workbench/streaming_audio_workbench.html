@@ -500,7 +500,7 @@
         <article class="panel hero-copy">
           <div class="hero-title-row">
             <h1>Streaming Audio Workbench</h1>
-            <span class="version-badge" id="versionLabel">26.04.17-121438</span>
+            <span class="version-badge" id="versionLabel">26.04.23-213956</span>
           </div>
           <p>
             Live microphone analysis with persistent history, waveform plus Hilbert-envelope
@@ -673,6 +673,13 @@
                 <input id="panSlider" type="range" min="0" max="0" step="0.01" value="0" />
               </div>
               <div class="control">
+                <label>Quick actions</label>
+                <div class="action-row">
+                  <button class="secondary" id="reverseAudioButton">Reverse audio</button>
+                  <button class="secondary" id="viewToSelectionButton">View to selection</button>
+                </div>
+              </div>
+              <div class="control">
                 <label>Analysis and view</label>
                 <div class="split-row">
                   <div class="mini-field">
@@ -782,7 +789,7 @@
     </main>
 
     <script>
-      const buildVersion = "26.04.17-121438";
+      const buildVersion = "26.04.23-213956";
 
       const state = {
         audioContext: null,
@@ -832,6 +839,8 @@
         resetButton: document.getElementById("resetButton"),
         saveAudioButton: document.getElementById("saveAudioButton"),
         screenshotButton: document.getElementById("screenshotButton"),
+        reverseAudioButton: document.getElementById("reverseAudioButton"),
+        viewToSelectionButton: document.getElementById("viewToSelectionButton"),
         analysisRateSelect: document.getElementById("analysisRateSelect"),
         spectrogramFrameRange: document.getElementById("spectrogramFrameRange"),
         spectrogramFrameOutput: document.getElementById("spectrogramFrameOutput"),
@@ -1032,10 +1041,42 @@
         updateSpectrogramFrameOutput();
       }
 
+      function formatViewDurationLabel(durationSec) {
+        if (durationSec < 1) {
+          return `Selection (${Math.round(durationSec * 1000)} ms)`;
+        }
+        return `Selection (${durationSec.toFixed(durationSec < 10 ? 2 : 1)} s)`;
+      }
+
+      function syncViewDurationControlValue() {
+        const desiredValue = String(state.viewDurationSec);
+        let customOption = elements.viewDurationSelect.querySelector('option[data-custom-view="true"]');
+        const hasBuiltInMatch = Array.from(elements.viewDurationSelect.options).some(
+          (option) => option.value === desiredValue && option.dataset.customView !== "true",
+        );
+
+        if (hasBuiltInMatch) {
+          if (customOption) {
+            customOption.remove();
+          }
+          elements.viewDurationSelect.value = desiredValue;
+          return;
+        }
+
+        if (!customOption) {
+          customOption = document.createElement("option");
+          customOption.dataset.customView = "true";
+          elements.viewDurationSelect.appendChild(customOption);
+        }
+        customOption.value = desiredValue;
+        customOption.textContent = formatViewDurationLabel(state.viewDurationSec);
+        elements.viewDurationSelect.value = desiredValue;
+      }
+
       function syncControlsToState() {
         elements.analysisRateSelect.value = String(state.analysisRate);
         elements.playbackModeSelect.value = state.playbackMode;
-        elements.viewDurationSelect.value = String(state.viewDurationSec);
+        syncViewDurationControlValue();
         elements.spectrogramFrameRange.value = String(Math.round(state.spectrogramFrameSec * 1000));
         elements.windowWidthRange.value = String(Math.round(state.selectionWidthSec * 1000));
         elements.preemphasisToggle.checked = state.usePreemphasis;
@@ -1223,6 +1264,58 @@
           mono[sampleIndex] *= scale;
         }
         return mono;
+      }
+
+      async function reverseBufferedAudio() {
+        if (!state.totalSamples || !state.inputSampleRate) {
+          alert("There is no buffered audio to reverse yet.");
+          return;
+        }
+
+        await stopPlayback();
+        if (state.isStarted) {
+          await stopCapture();
+        }
+
+        const forward = extractSamples(0, state.totalSamples);
+        const reversed = new Float32Array(forward.length);
+        for (let index = 0; index < forward.length; index += 1) {
+          reversed[index] = forward[forward.length - 1 - index];
+        }
+
+        state.chunks = [reversed];
+        state.totalSamples = reversed.length;
+        state.viewportStartSec = 0.0;
+        state.playCursorSec = 0.0;
+        state.selectionCenterSec = state.selectionWidthSec / 2;
+        state.followLive = false;
+        elements.followLiveToggle.checked = false;
+
+        syncSelectionToViewport();
+        syncControlsToState();
+        updatePanSlider();
+        updateStatus();
+        scheduleRender();
+      }
+
+      function setViewToSelection() {
+        const totalDuration = totalDurationSec();
+        if (!totalDuration) {
+          alert("There is no buffered audio to zoom yet.");
+          return;
+        }
+
+        const selection = getSelectionBounds();
+        state.followLive = false;
+        elements.followLiveToggle.checked = false;
+        state.viewDurationSec = Math.max(0.015, selection.end - selection.start);
+        state.viewportStartSec = clamp(selection.start, 0, Math.max(0, totalDuration - state.viewDurationSec));
+
+        syncSelectionToViewport();
+        syncControlsToState();
+        updatePanSlider();
+        updateStatus();
+        scheduleRender();
       }
 
       async function stopPlayback() {
@@ -2918,6 +3011,8 @@
       elements.resetButton.addEventListener("click", resetEverything);
       elements.saveAudioButton.addEventListener("click", exportBufferedAudioAsWav);
       elements.screenshotButton.addEventListener("click", capturePageScreenshot);
+      elements.reverseAudioButton.addEventListener("click", reverseBufferedAudio);
+      elements.viewToSelectionButton.addEventListener("click", setViewToSelection);
       elements.analysisRateSelect.addEventListener("change", (event) => {
         state.analysisRate = event.target.value;
         scheduleRender();
