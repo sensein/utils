@@ -18,7 +18,7 @@
           <div>
             <p class="vw-eyebrow">
               Capture · follow · measure
-              <span class="vw-version">26.09.15-signals.3</span>
+              <span class="vw-version">26.09.15-gaze.1</span>
             </p>
             <div class="vw-title-row">
               <h1>Video workbench</h1>
@@ -138,15 +138,7 @@
                       step="0.1"
                       placeholder="Clip end"
                   /></label>
-                  <label class="vw-field"
-                    >Outer-eye distance (mm)<input
-                      id="vw-calibration"
-                      type="number"
-                      min="30"
-                      max="150"
-                      step="0.1"
-                      placeholder="Optional · single person"
-                  /></label>
+
                   <label class="vw-check"
                     ><input id="vw-pose" type="checkbox" checked /> Estimate
                     posture</label
@@ -261,6 +253,46 @@
                 hidden
               ></progress>
             </section>
+            <details class="vw-panel vw-calibration">
+              <summary>Calibration &amp; gaze</summary>
+              <p class="vw-small">
+                Video: capture a neutral reference while holding still, or use
+                analyzed frames around the playback cursor. Scale is optional;
+                set it before recording or reanalysis.
+              </p>
+              <label class="vw-field"
+                >Outer-eye distance (mm)<input
+                  id="vw-calibration"
+                  type="number"
+                  min="30"
+                  max="150"
+                  step="0.1"
+                  placeholder="Optional · single person"
+              /></label>
+              <div class="vw-buttons">
+                <button id="vw-neutral" class="vw-button" disabled>
+                  Set neutral reference</button
+                ><button id="vw-gaze-calibrate" class="vw-button" disabled>
+                  Calibrate screen gaze</button
+                ><button id="vw-clear-calibration" class="vw-button">
+                  Clear calibration
+                </button>
+              </div>
+              <label class="vw-check"
+                ><input id="vw-show-gaze" type="checkbox" /> Show screen gaze
+                marker</label
+              >
+              <p id="vw-calibration-status" class="vw-small" role="status">
+                Gaze requires a live-camera calibration with one person,
+                followed by accuracy checks. Keep the camera and seating
+                position fixed.
+              </p>
+              <p class="vw-small">
+                Experimental screen gaze; eye-relative direction is available
+                without calibration. Closing or replacing the source clears
+                calibration.
+              </p>
+            </details>
             <section class="vw-panel vw-export">
               <div>
                 <h2>Take your work with you</h2>
@@ -287,11 +319,7 @@
               </div>
             </section>
           </div>
-          <div
-            class="vw-review"
-            role="region"
-            aria-label="Video analysis"
-          >
+          <div class="vw-review" role="region" aria-label="Video analysis">
             <section class="vw-panel vw-signals">
               <div class="vw-panel-top">
                 <h2>Aligned signals</h2>
@@ -365,7 +393,45 @@
                   <option value="smileAsymmetry">Smile asymmetry</option>
                   <option value="headRoll">Head roll</option>
                   <option value="shoulderTilt">Shoulder tilt</option>
-                  <option value="torsoLean">Torso lean</option>
+                  <option value="torsoLean">Torso lean · visible hips</option>
+                  <option value="torsoLeanEstimated">
+                    Torso lean · includes inferred hips
+                  </option>
+                  <option value="blinkClosed">Bilateral blink state</option>
+                  <option value="blinkLeft">Blink coefficient · left</option>
+                  <option value="blinkRight">Blink coefficient · right</option>
+                  <option value="irisX">
+                    Eye direction · horizontal (uncalibrated)
+                  </option>
+                  <option value="irisY">
+                    Eye direction · vertical (uncalibrated)
+                  </option>
+                  <option value="gazeX">Screen gaze · horizontal</option>
+                  <option value="gazeY">Screen gaze · vertical</option>
+                  <option value="headRollRelative">
+                    Head roll · relative to neutral
+                  </option>
+                  <option value="shoulderTiltRelative">
+                    Shoulder tilt · relative to neutral
+                  </option>
+                  <option value="torsoLeanRelative">
+                    Torso lean · relative to neutral
+                  </option>
+                  <option value="torsoLeanEstimatedRelative">
+                    Inferred torso lean · relative to neutral
+                  </option>
+                  <option value="lipApertureRelative">
+                    Lip aperture · relative to neutral
+                  </option>
+                  <option value="mouthWidthRelative">
+                    Mouth width · relative to neutral
+                  </option>
+                  <option value="lowerLipYRelative">
+                    Lower lip · relative to neutral
+                  </option>
+                  <option value="jawYRelative">
+                    Jaw position · relative to neutral
+                  </option>
                 </select></label
               >
               <div class="vw-axis">
@@ -391,6 +457,12 @@
               </div>
               <p id="vw-motion-status" class="vw-small">
                 Enable the camera or analyze a video to explore movement.
+              </p>
+              <button id="vw-inferred-hips" class="vw-button" hidden>
+                Show torso using inferred hips
+              </button>
+              <p id="vw-gaze-readout" class="vw-small">
+                Screen gaze requires calibration.
               </p>
               <h3 class="vw-subheading">Audio waveform</h3>
               <div class="vw-chart">
@@ -451,6 +523,30 @@
                 </p>
               </div>
             </section>
+            <section class="vw-panel vw-eye-events">
+              <div class="vw-panel-top">
+                <h2>Blink events</h2>
+                <button id="vw-blink-csv" class="vw-button" disabled>
+                  Download events CSV
+                </button>
+              </div>
+              <p id="vw-blink-status" class="vw-small">
+                Analyze or record to encode bilateral blinks.
+              </p>
+              <p class="vw-small">
+                Pink marks on the movement timeline show completed blinks.
+                Missing data interrupts an event; low sample rates may miss
+                brief blinks. Left/right coefficients remain available as
+                signals.
+              </p>
+              <div
+                id="vw-blink-events"
+                class="vw-event-list"
+                tabindex="0"
+                role="region"
+                aria-label="Blink event timestamps"
+              ></div>
+            </section>
             <section class="vw-panel vw-samples">
               <div class="vw-panel-top">
                 <h2>Sampled measurements</h2>
@@ -486,6 +582,20 @@
             </section>
           </div>
         </div>
+
+        <div id="vw-gaze-marker" hidden aria-hidden="true"></div>
+        <dialog id="vw-gaze-dialog" aria-labelledby="vw-gaze-instruction">
+          <div class="vw-gaze-instructions">
+            <h2 id="vw-gaze-instruction">Look at each target</h2>
+            <p id="vw-gaze-sample-progress">Waiting for eyes</p>
+            <button id="vw-gaze-begin" class="vw-button vw-primary" autofocus>
+              Begin calibration</button
+            ><button id="vw-gaze-cancel" class="vw-button">
+              Cancel calibration
+            </button>
+          </div>
+          <div id="vw-gaze-target" aria-hidden="true"></div>
+        </dialog>
         <dialog
           id="vw-about"
           class="vw-panel vw-about"
@@ -534,9 +644,46 @@
                 calibrated FACS action units. Asymmetry is the absolute
                 left–right difference.
               </p>
+              <p>
+                If hips are cropped, choose “Torso lean · includes inferred
+                hips” for a separate, lower-confidence model estimate. It
+                requires visible shoulders; it does not make the hips observed.
+                A neutral reference subtracts stable median video measurements
+                while preserving absolute values. It does not correct 3D motion.
+              </p>
+              <p>
+                Bilateral blinks close at coefficients ≥ 0.6 and reopen at ≤
+                0.3. Missing detections or sampling gaps interrupt events;
+                closures over one second are labelled eye closures. Pink bars
+                mark completed blinks. Low sampling rates can miss brief blinks.
+              </p>
+              <p>
+                Experimental screen gaze uses eye-relative iris positions and
+                head position/scale, a nine-target ridge-regression calibration
+                and four separate accuracy checks. It accepts mean normalized
+                error ≤ 0.15 and worst target median ≤ 0.25. These are usability
+                thresholds, not research validation. Closed/missing eyes and
+                large head changes suppress estimates. Keep the camera, window
+                and seating position fixed. Recordings retain their calibration;
+                unrelated clips provide eye-relative direction only.
+              </p>
             </div>
             <div>
               <h3>Research context</h3>
+              <p>
+                <a
+                  href="https://github.com/google-ai-edge/mediapipe/blob/master/docs/solutions/iris.md"
+                  >MediaPipe Iris</a
+                >
+                alone does not infer screen gaze.
+                <a
+                  href="https://cs.brown.edu/people/apapouts/papers/ijcai2016webgazer.pdf"
+                  >WebGazer research</a
+                >
+                motivates explicit screen calibration. This workbench uses its
+                own experimental mapping and does not inherit WebGazer’s
+                validation results. Per-session accuracy checks are exported.
+              </p>
               <p>
                 Sanchez et al.,
                 <em
