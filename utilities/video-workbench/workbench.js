@@ -1,3 +1,5 @@
+import { LiveClock, nearestFrame } from "./live.mjs";
+import { OverlayRecording } from "./overlay-recording.js";
 import { MODEL_INFO } from "./models.js";
 import {
   faceMetrics,
@@ -7,7 +9,7 @@ import {
   summarize,
   toCSV,
 } from "./metrics.mjs";
-export const BUILD_VERSION = "26.09.15";
+export const BUILD_VERSION = "26.09.15-live.1";
 const MAX_BYTES = 250 * 1024 * 1024,
   MAX_SECONDS = 300,
   MAX_FRAMES = 4500;
@@ -41,20 +43,36 @@ export function initVideoWorkbench() {
   let audioContext = null,
     requestId = 0,
     stopped = false;
+  let live = null,
+    liveSerial = 0,
+    faceConnections = [];
+  let annotated = null,
+    overlayBlob = null,
+    overlayError = null;
   const pending = new Map();
   function status(message, error = false) {
     el("status").textContent = message;
     el("status").dataset.error = String(error);
   }
   function controls() {
-    const busy = ["loading", "recording", "analyzing"].includes(mode);
+    const busy = ["loading", "recording", "finishing", "analyzing"].includes(
+      mode,
+    );
     button("camera").disabled =
       busy || mode === "camera" || !navigator.mediaDevices?.getUserMedia;
     button("record").disabled =
-      mode !== "camera" || typeof MediaRecorder === "undefined";
+      mode !== "camera" ||
+      typeof MediaRecorder === "undefined" ||
+      Boolean(live && !live.ready);
     button("stop").disabled = mode !== "recording";
     button("camera-off").disabled = mode !== "camera";
     input("file").disabled = busy;
+    input("live").disabled = busy;
+    input("save-overlay").disabled =
+      busy ||
+      !input("live").checked ||
+      !HTMLCanvasElement.prototype.captureStream;
+    button("download-overlay").disabled = !overlayBlob || busy;
     input("mic").disabled = busy || mode === "camera";
     select("resolution").disabled = busy || mode === "camera";
     button("download").disabled = !media || busy;
@@ -62,7 +80,9 @@ export function initVideoWorkbench() {
     button("cancel").disabled = mode !== "analyzing";
     el("settings").disabled = busy || mode === "camera";
     button("json").disabled = button("csv").disabled = !frames.length || busy;
-    select("track").disabled = !frames.some((f) => f.people.length) || busy;
+    select("track").disabled =
+      !(frames.some((f) => f.people.length) || live?.latest?.people.length) ||
+      ["loading", "finishing", "analyzing"].includes(mode);
     el("empty").hidden = mode !== "empty";
     video.controls = mode === "clip";
   }
@@ -91,6 +111,7 @@ export function initVideoWorkbench() {
     });
   }
   function stopCamera() {
+    stopLive();
     stream?.getTracks().forEach((t) => t.stop());
     stream = null;
     video.srcObject = null;
@@ -112,6 +133,11 @@ export function initVideoWorkbench() {
   }
   function release() {
     sourceGeneration++;
+    stopLive();
+    annotated?.discard();
+    annotated = null;
+    overlayBlob = null;
+    overlayError = null;
     stopped = true;
     terminateWorker();
     audioWorker?.terminate();
@@ -150,6 +176,8 @@ export function initVideoWorkbench() {
     el("audio-status").textContent =
       "An audio track, when decodable, appears here after opening or recording a video.";
     el("progress").hidden = true;
+    el("live-status").textContent =
+      "Enable the camera to start continuous estimation. Visibility does not affect data capture.";
     status("Ready to collect a video.");
     controls();
   }
@@ -191,7 +219,7 @@ export function initVideoWorkbench() {
     video.currentTime = time;
     await ready;
   }
-  async function loadClip(blob, name, knownDuration) {
+  async function loadClip(blob, name, knownDuration, captured = null) {
     if (blob.size > MAX_BYTES && knownDuration === undefined) {
       status("This file exceeds 250 MB. Choose a smaller clip.", true);
       return;
@@ -237,7 +265,26 @@ export function initVideoWorkbench() {
       mode = "clip";
       el("source").textContent =
         `${name} · ${video.videoWidth}×${video.videoHeight} · ${duration.toFixed(1)} s`;
-      status("Video ready. Choose an interval and analyze movement.");
+      if (captured) {
+        frames = captured.frames;
+        run = captured.run;
+        faceConnections = captured.faceConnections;
+        overlayBlob = captured.overlayBlob;
+        overlayError = captured.overlayError;
+        if (run) {
+          run.end = duration;
+          run.sampledFrames = frames.length;
+        }
+        refreshTracks();
+      }
+      status(
+        captured?.run
+          ? `Video ready · ${frames.length} live estimates captured. ${captured.run.partial ? "Estimation was interrupted; see export metadata." : "Replay or download video and results."}${overlayError ? " Overlay video unavailable: " + overlayError : ""}`
+          : "Video ready. Choose an interval and analyze movement.",
+      );
+      el("live-status").textContent = captured?.run
+        ? `${frames.length} live estimates retained · ${(captured.run.achievedSamplesPerSecond ?? 0).toFixed(1)} /s achieved. Playback overlays can be shown or hidden independently.`
+        : "Camera capture supports continuous estimation. Analyze this local clip using the interval controls below.";
       controls();
       drawMotion();
       void decodeAudio(blob, generation);
@@ -306,6 +353,219 @@ export function initVideoWorkbench() {
       }
     }
   }
+  function stopLive() {
+    const current = live;
+    if (!current) return;
+    live = null;
+    current.clock.stopRecording();
+    if (current.callback !== undefined) {
+      if (current.usesVideoCallback)
+        video.cancelVideoFrameCallback(current.callback);
+      else cancelAnimationFrame(current.callback);
+    }
+    terminateWorker();
+  }
+  async function startLive() {
+    if (mode !== "camera" || !input("live").checked) return;
+    stopLive();
+    const fps = Number(select("fps").value),
+      people = Number(select("people").value);
+    const eyeDistance = input("calibration").value
+      ? Number(input("calibration").value)
+      : null;
+    if (
+      eyeDistance !== null &&
+      (!finite(eyeDistance) ||
+        eyeDistance < 30 ||
+        eyeDistance > 150 ||
+        people !== 1)
+    ) {
+      input("live").checked = false;
+      controls();
+      status(
+        "Live calibration needs 30–150 mm and the single-person setting. Correct the settings before enabling the camera.",
+        true,
+      );
+      return;
+    }
+    const current = {
+      id: ++liveSerial,
+      clock: new LiveClock(fps),
+      settings: { fps, people, posture: input("pose").checked, eyeDistance },
+      faceTracker: new TrackManager(),
+      poseTracker: new TrackManager(),
+      ready: false,
+      latest: null,
+      completed: 0,
+      began: performance.now(),
+      usesVideoCallback: typeof video.requestVideoFrameCallback === "function",
+    };
+    live = current;
+    controls();
+    el("live-status").textContent =
+      "Loading MediaPipe for continuous face and posture estimation…";
+    try {
+      await initializeModels(people, current.settings.posture);
+      if (live !== current) return;
+      current.ready = true;
+      current.began = performance.now();
+      controls();
+      status(
+        "Camera ready. Continuous estimation is running; start recording to capture results.",
+      );
+      const schedule = () => {
+        if (live !== current) return;
+        current.callback = current.usesVideoCallback
+          ? video.requestVideoFrameCallback(tick)
+          : requestAnimationFrame(tick);
+      };
+      const tick = async (_now, metadata) => {
+        if (live !== current || !["camera", "recording"].includes(mode)) return;
+        schedule();
+        const now = performance.now(),
+          mediaTime = metadata?.mediaTime ?? video.currentTime;
+        if (video.readyState < 2 || !current.clock.admit(now, mediaTime))
+          return;
+        const stamp = current.clock.stamp(now);
+        try {
+          const bitmap = await createImageBitmap(video);
+          if (live !== current) {
+            bitmap.close();
+            return;
+          }
+          const result = await ask(
+            { type: "frame", bitmap, timestamp: now },
+            [bitmap],
+            30000,
+          );
+          if (live !== current) return;
+          const frame = {
+            time: 0,
+            captureClockMs: now,
+            sourceMediaTime: mediaTime,
+            inferenceLatencyMs: performance.now() - now,
+            people: processResult(
+              result,
+              now / 1000,
+              current.faceTracker,
+              current.poseTracker,
+              eyeDistance,
+            ),
+          };
+          current.latest = frame;
+          current.completed++;
+          const time = current.clock.recordTime(stamp);
+          if (mode === "recording" && time !== null && run?.mode === "live") {
+            frame.time = time;
+            frames.push(frame);
+            run.sampledFrames = frames.length;
+            run.skippedCameraFrames = current.clock.skipped;
+            if (frames.length * people >= MAX_FRAMES)
+              finishRecording("sample_limit");
+          }
+          const ids = [
+            ...new Set([
+              ...Array.from(select("track").options)
+                .map((o) => o.value)
+                .filter(Boolean),
+              ...frame.people.map((p) => p.id),
+            ]),
+          ];
+          if (
+            ids.length !==
+            Array.from(select("track").options).filter((o) => o.value).length
+          ) {
+            const selected = select("track").value;
+            select("track").replaceChildren(
+              ...ids.map(
+                (id) =>
+                  new Option(
+                    `${id.startsWith("F") ? "Face" : "Posture"} track ${id}`,
+                    id,
+                  ),
+              ),
+            );
+            if (ids.includes(selected)) select("track").value = selected;
+            controls();
+          }
+          el("live-status").textContent =
+            `Live estimates: ${current.completed} · ${(current.completed / Math.max(0.001, (performance.now() - current.began) / 1000)).toFixed(1)} /s achieved · ${frame.inferenceLatencyMs.toFixed(0)} ms latency · ${mode === "recording" ? frames.length + " samples captured" : "preview only"}. Overlay visibility does not affect capture.`;
+          drawOverlay();
+        } catch (error) {
+          if (live !== current) return;
+          if (run?.mode === "live" && mode === "recording") {
+            run.partial = true;
+            run.reason = "live_inference_failed";
+            run.inferenceError = errorText(error);
+          }
+          stopLive();
+          input("live").checked = false;
+          controls();
+          el("live-status").textContent =
+            `Continuous estimation stopped: ${errorText(error)}. ${mode === "recording" ? "Video recording continues; completed estimates are retained." : "Retry by enabling continuous estimation."}`;
+        } finally {
+          current.clock.complete();
+        }
+      };
+      schedule();
+    } catch (error) {
+      if (live !== current) return;
+      stopLive();
+      input("live").checked = false;
+      controls();
+      el("live-status").textContent =
+        `Live estimation could not start: ${errorText(error)}. Camera recording is still available.`;
+    }
+  }
+  input("live").onchange = () => {
+    if (mode === "camera") {
+      if (input("live").checked) void startLive();
+      else {
+        stopLive();
+        el("live-status").textContent =
+          "Continuous estimation is off. Camera preview remains active.";
+        drawOverlay();
+      }
+    }
+    controls();
+  };
+  function overlayChoice() {
+    return {
+      show: input("show-overlay").checked,
+      mesh: input("show-mesh").checked,
+      faceKeypoints: input("show-face").checked,
+      postureKeypoints: input("show-pose").checked,
+      isolate: input("follow").checked,
+      track: select("track").value,
+    };
+  }
+  function recordOverlayChoice() {
+    if (mode === "recording" && run?.mode === "live")
+      run.overlayVisibilityEvents.push({
+        time: (performance.now() - recordStart) / 1000,
+        ...overlayChoice(),
+      });
+  }
+  function finishRecording(reason = "user_stop") {
+    if (mode !== "recording") return;
+    const elapsed = (performance.now() - recordStart) / 1000;
+    if (run?.mode === "live") {
+      run.end = elapsed;
+      run.stopReason = reason;
+      run.skippedCameraFrames = live?.clock.skipped ?? run.skippedCameraFrames;
+      run.achievedSamplesPerSecond = frames.length / Math.max(0.001, elapsed);
+      if (!run.inferenceError) {
+        run.partial = false;
+        run.reason = "complete";
+      }
+    }
+    live?.clock.stopRecording();
+    mode = "finishing";
+    controls();
+    status("Finishing video and captured estimates…");
+    if (recorder?.state !== "inactive") recorder?.stop();
+  }
+
   button("camera").onclick = async () => {
     const generation = sourceGeneration;
     mode = "loading";
@@ -344,6 +604,7 @@ export function initVideoWorkbench() {
         "Audio signals will be available after recording.";
       status("Camera ready. Start recording when you are ready.");
       controls();
+      if (input("live").checked) void startLive();
       opened.getVideoTracks()[0].addEventListener("ended", () => {
         if (mode === "recording") button("stop").click();
         else if (mode === "camera") {
@@ -370,9 +631,13 @@ export function initVideoWorkbench() {
     el("source").textContent = "No video loaded";
     controls();
     status("Camera turned off.");
+    el("live-status").textContent =
+      "Camera off; continuous estimation is stopped.";
+    drawOverlay();
   };
   button("record").onclick = () => {
-    if (!stream) return;
+    if (!stream || (live && !live.ready)) return;
+    let current;
     try {
       const mime = [
         "video/webm;codecs=vp9,opus",
@@ -380,69 +645,132 @@ export function initVideoWorkbench() {
         "video/webm",
         "video/mp4",
       ].find((t) => MediaRecorder.isTypeSupported(t));
-      recorder = new MediaRecorder(
-        stream,
-        mime
-          ? { mimeType: mime, videoBitsPerSecond: 4000000 }
-          : { videoBitsPerSecond: 4000000 },
-      );
+      current = new MediaRecorder(stream, {
+        ...(mime ? { mimeType: mime } : {}),
+        videoBitsPerSecond: 4000000,
+      });
+      recorder = current;
       const chunks = [];
       let bytes = 0;
-      const current = recorder;
       const generation = sourceGeneration;
+      frames = [];
+      run = null;
+      overlayBlob = null;
+      overlayError = null;
       current.ondataavailable = ({ data }) => {
         if (data.size) {
           chunks.push(data);
           bytes += data.size;
         }
-        if (
-          bytes >= MAX_BYTES - 5 * 1024 * 1024 &&
-          current.state === "recording"
-        )
-          current.stop();
+        if (bytes + (annotated?.bytes ?? 0) >= MAX_BYTES - 5 * 1024 * 1024)
+          finishRecording("size_limit");
       };
-      current.onstop = () => {
+      current.onstop = async () => {
+        if (generation !== sourceGeneration) return;
+        if (mode === "recording") finishRecording("encoder_stopped");
         clearInterval(recordTimer);
         const elapsed = (performance.now() - recordStart) / 1000;
+        const saved = {
+          frames,
+          run,
+          faceConnections,
+          overlayBlob: null,
+          overlayError,
+        };
+        const composite = annotated;
+        stopLive();
+        const overlayResult = composite ? await composite.stop() : null;
+        if (generation !== sourceGeneration) {
+          composite?.discard();
+          return;
+        }
+        if (annotated === composite) annotated = null;
+        saved.overlayBlob = overlayResult?.blob ?? null;
+        saved.overlayError = overlayResult?.error ?? saved.overlayError;
         stopCamera();
         recorder = null;
-        if (generation !== sourceGeneration) return;
-        const blob = new Blob(chunks, { type: current.mimeType });
         void loadClip(
-          blob,
+          new Blob(chunks, { type: current.mimeType }),
           `recording-${new Date().toISOString().replaceAll(":", "-")}.${current.mimeType.includes("mp4") ? "mp4" : "webm"}`,
           elapsed,
+          saved,
         );
       };
       current.onerror = () => {
-        status(
-          "Recording failed. Try a different recording size or browser.",
-          true,
-        );
-        if (current.state !== "inactive") current.stop();
+        if (run) {
+          run.partial = true;
+          run.inferenceError = "Video encoder failed";
+          run.reason = "video_encoder_failed";
+        }
+        status("Video recording failed; finishing available data.", true);
+        finishRecording("encoder_error");
       };
-      current.start(500);
       recordStart = performance.now();
+      current.start(500);
       mode = "recording";
+      if (live?.ready) {
+        const settings = live.settings;
+        live.clock.startRecording(recordStart);
+        run = {
+          ...settings,
+          mode: "live",
+          start: 0,
+          end: 0,
+          units: settings.eyeDistance
+            ? "approximate_2d_mm"
+            : "outer_eye_distance",
+          partial: true,
+          reason: "in_progress",
+          sampledFrames: 0,
+          recordingStartClockMs: recordStart,
+          skippedCameraFrames: 0,
+          timestampBasis:
+            "performance.now at input frame capture, relative to recording start",
+          overlayVisibilityEvents: [{ time: 0, ...overlayChoice() }],
+        };
+        if (input("save-overlay").checked) {
+          try {
+            annotated = new OverlayRecording(
+              video,
+              stream.getAudioTracks(),
+              (ctx, w, h) =>
+                paintPeople(ctx, w, h, currentFrame(), select("track").value),
+              mime,
+              (n) => {
+                if (n + bytes >= MAX_BYTES - 5 * 1024 * 1024)
+                  finishRecording("size_limit");
+              },
+            );
+            run.overlayVideoStartOffsetSeconds =
+              (annotated.startedAt - recordStart) / 1000;
+          } catch (error) {
+            overlayError = errorText(error);
+            el("live-status").textContent =
+              "Overlay video unavailable; raw video and estimates still capture: " +
+              overlayError;
+          }
+        }
+      }
       controls();
       recordTimer = setInterval(() => {
         const elapsed = (performance.now() - recordStart) / 1000;
-        status(
-          `Recording · ${elapsed.toFixed(1)} s · ${(bytes / 1024 / 1024).toFixed(1)} MB`,
-        );
-        if (elapsed >= MAX_SECONDS && current.state === "recording")
-          current.stop();
+        if (mode === "recording")
+          status(
+            `Recording · ${elapsed.toFixed(1)} s · ${((bytes + (annotated?.bytes ?? 0)) / 1024 / 1024).toFixed(1)} MB · ${run?.mode === "live" ? frames.length + " live estimates captured" : "video only"}`,
+          );
+        if (elapsed >= MAX_SECONDS) finishRecording("duration_limit");
       }, 200);
-    } catch (e) {
-      status(`Recording could not start: ${errorText(e)}`, true);
+    } catch (error) {
+      if (current?.state === "recording") finishRecording("start_error");
+      else {
+        recorder = null;
+        mode = "camera";
+        controls();
+      }
+      status("Recording could not start: " + errorText(error), true);
     }
   };
-  button("stop").onclick = () => {
-    if (recorder?.state === "recording") {
-      button("stop").disabled = true;
-      recorder.stop();
-    }
-  };
+  button("stop").onclick = () => finishRecording();
   input("file").onchange = () => {
     const file = input("file").files?.[0];
     if (file) void loadClip(file, file.name);
@@ -456,9 +784,98 @@ export function initVideoWorkbench() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
+  button("download-overlay").onclick = () => {
+    if (overlayBlob)
+      download(
+        overlayBlob,
+        "recording-with-overlay." +
+          (overlayBlob.type.includes("mp4") ? "mp4" : "webm"),
+      );
+  };
   button("download").onclick = () => {
     if (media) download(media, mediaName);
   };
+  async function initializeModels(people, posture) {
+    worker = new Worker(new URL("./inference.worker.js", import.meta.url));
+    worker.onmessage = ({ data }) => {
+      const p = pending.get(data.id);
+      if (!p) return;
+      clearTimeout(p.timer);
+      pending.delete(data.id);
+      data.error ? p.reject(new Error(data.error)) : p.resolve(data);
+    };
+    worker.onerror = (e) => {
+      for (const p of pending.values()) {
+        clearTimeout(p.timer);
+        p.reject(new Error(e.message || "Analysis worker failed"));
+      }
+      pending.clear();
+    };
+    const info = await ask({ type: "init", people, pose: posture });
+    faceConnections = info.faceConnections ?? [];
+  }
+  function processResult(result, time, faceTracker, poseTracker, eyeDistance) {
+    const faces = result.faces.faceLandmarks,
+      poses = result.poses?.landmarks ?? [];
+    const boxes = faces.map(faceBox),
+      ids = faceTracker.update(boxes, time),
+      poseIds = poseTracker.update(poses.map(faceBox), time);
+    const assignedPoses = new Set();
+    const persons = faces.map((points, i) => {
+      const shapes = result.faces.faceBlendshapes[i]?.categories ?? [];
+      return {
+        id: `F${ids[i].id}`,
+        kind: "face",
+        ambiguous: ids[i].ambiguous,
+        face: points,
+        blendshapes: shapes,
+        transform: result.faces.facialTransformationMatrixes[i],
+        metrics: faceMetrics(
+          points,
+          shapes,
+          video.videoWidth,
+          video.videoHeight,
+          eyeDistance,
+        ),
+      };
+    });
+    // Associate a pose only if its visible nose lies inside a unique face box.
+    for (let p = 0; p < poses.length; p++) {
+      const nose = poses[p][0];
+      if (!nose || (nose.visibility ?? 0) < 0.6) continue;
+      const matches = boxes
+        .map((b, i) => ({ b, i }))
+        .filter(
+          ({ b }) =>
+            Math.abs(nose.x - b.x) < b.w * 0.6 &&
+            Math.abs(nose.y - b.y) < b.h * 0.6,
+        );
+      if (matches.length === 1) {
+        const person = persons[matches[0].i];
+        if (person.pose) continue;
+        person.pose = poses[p];
+        person.worldPose = result.poses?.worldLandmarks[p];
+        person.metrics = {
+          ...person.metrics,
+          ...poseMetrics(poses[p], video.videoWidth, video.videoHeight),
+        };
+        assignedPoses.add(p);
+      }
+    }
+    poses.forEach((points, p) => {
+      if (!assignedPoses.has(p))
+        persons.push({
+          id: `P${poseIds[p].id}`,
+          kind: "pose",
+          ambiguous: poseIds[p].ambiguous,
+          pose: points,
+          worldPose: result.poses?.worldLandmarks[p],
+          metrics: poseMetrics(points, video.videoWidth, video.videoHeight),
+        });
+    });
+    return persons;
+  }
+
   button("analyze").onclick = async () => {
     const start = Number(input("start").value),
       end = Number(input("end").value),
@@ -517,6 +934,7 @@ export function initVideoWorkbench() {
       partial: true,
       reason: "in_progress",
       sampledFrames: 0,
+      mode: "offline",
     };
     el("progress").hidden = false;
     el("progress").value = 0;
@@ -524,22 +942,7 @@ export function initVideoWorkbench() {
     const faceTracker = new TrackManager(),
       poseTracker = new TrackManager();
     try {
-      worker = new Worker(new URL("./inference.worker.js", import.meta.url));
-      worker.onmessage = ({ data }) => {
-        const p = pending.get(data.id);
-        if (!p) return;
-        clearTimeout(p.timer);
-        pending.delete(data.id);
-        data.error ? p.reject(new Error(data.error)) : p.resolve(data);
-      };
-      worker.onerror = (e) => {
-        for (const p of pending.values()) {
-          clearTimeout(p.timer);
-          p.reject(new Error(e.message || "Analysis worker failed"));
-        }
-        pending.clear();
-      };
-      await ask({ type: "init", people, pose: run.posture });
+      await initializeModels(people, run.posture);
       const count = Math.ceil((end - start) * fps);
       for (let index = 0; index < count; index++) {
         if (stopped || generation !== sourceGeneration) break;
@@ -556,64 +959,13 @@ export function initVideoWorkbench() {
           [bitmap],
           30000,
         );
-        const faces = result.faces.faceLandmarks,
-          poses = result.poses?.landmarks ?? [];
-        const boxes = faces.map(faceBox),
-          ids = faceTracker.update(boxes, time),
-          poseIds = poseTracker.update(poses.map(faceBox), time);
-        const assignedPoses = new Set();
-        const persons = faces.map((points, i) => {
-          const shapes = result.faces.faceBlendshapes[i]?.categories ?? [];
-          return {
-            id: `F${ids[i].id}`,
-            kind: "face",
-            ambiguous: ids[i].ambiguous,
-            face: points,
-            blendshapes: shapes,
-            transform: result.faces.facialTransformationMatrixes[i],
-            metrics: faceMetrics(
-              points,
-              shapes,
-              video.videoWidth,
-              video.videoHeight,
-              eyeDistance,
-            ),
-          };
-        });
-        // Associate a pose only if its visible nose lies inside a unique face box.
-        for (let p = 0; p < poses.length; p++) {
-          const nose = poses[p][0];
-          if (!nose || (nose.visibility ?? 0) < 0.6) continue;
-          const matches = boxes
-            .map((b, i) => ({ b, i }))
-            .filter(
-              ({ b }) =>
-                Math.abs(nose.x - b.x) < b.w * 0.6 &&
-                Math.abs(nose.y - b.y) < b.h * 0.6,
-            );
-          if (matches.length === 1) {
-            const person = persons[matches[0].i];
-            if (person.pose) continue;
-            person.pose = poses[p];
-            person.worldPose = result.poses?.worldLandmarks[p];
-            person.metrics = {
-              ...person.metrics,
-              ...poseMetrics(poses[p], video.videoWidth, video.videoHeight),
-            };
-            assignedPoses.add(p);
-          }
-        }
-        poses.forEach((points, p) => {
-          if (!assignedPoses.has(p))
-            persons.push({
-              id: `P${poseIds[p].id}`,
-              kind: "pose",
-              ambiguous: poseIds[p].ambiguous,
-              pose: points,
-              worldPose: result.poses?.worldLandmarks[p],
-              metrics: poseMetrics(points, video.videoWidth, video.videoHeight),
-            });
-        });
+        const persons = processResult(
+          result,
+          time,
+          faceTracker,
+          poseTracker,
+          eyeDistance,
+        );
         frames.push({ time, people: persons });
         run.sampledFrames = frames.length;
         el("progress").value = (index + 1) / count;
@@ -733,36 +1085,37 @@ export function initVideoWorkbench() {
     drawMotion();
     drawOverlay();
   }
-  select("track").onchange = updateSummary;
+  select("track").onchange = () => {
+    recordOverlayChoice();
+    updateSummary();
+  };
   select("signal").onchange = drawMotion;
-  for (const key of ["show-face", "show-pose", "follow"])
-    input(key).onchange = drawOverlay;
+  for (const key of [
+    "show-overlay",
+    "show-mesh",
+    "show-face",
+    "show-pose",
+    "follow",
+  ])
+    input(key).onchange = () => {
+      recordOverlayChoice();
+      drawOverlay();
+    };
   function currentFrame() {
-    if (!run || !frames.length) return null;
-    const index = Math.round((video.currentTime - run.start) * run.fps);
-    const frame = frames[Math.max(0, Math.min(frames.length - 1, index))];
-    return Math.abs(frame.time - video.currentTime) <= 0.65 / run.fps
-      ? frame
-      : null;
-  }
-  function drawOverlay() {
-    const width = video.videoWidth || 1280,
-      height = video.videoHeight || 720;
-    overlay.width = width;
-    overlay.height = height;
-    const scale = Math.min(
-      video.clientWidth / width,
-      video.clientHeight / height,
+    if (["camera", "recording"].includes(mode))
+      return live?.latest &&
+        performance.now() - live.latest.captureClockMs <= 500
+        ? live.latest
+        : null;
+    if (!run) return null;
+    return nearestFrame(
+      frames,
+      video.currentTime,
+      run.mode === "live" ? Math.min(0.25, 1.6 / run.fps) : 0.65 / run.fps,
     );
-    overlay.style.width = `${width * scale}px`;
-    overlay.style.height = `${height * scale}px`;
-    overlay.style.left = `${(video.clientWidth - width * scale) / 2}px`;
-    overlay.style.top = `${(video.clientHeight - height * scale) / 2}px`;
-    const ctx = overlay.getContext("2d");
-    ctx.clearRect(0, 0, width, height);
-    const frame = currentFrame(),
-      selected = select("track").value;
-    if (frame) {
+  }
+  function paintPeople(ctx, width, height, frame, selected) {
+    if (frame && input("show-overlay").checked) {
       for (const person of frame.people) {
         if (input("follow").checked && person.id !== selected) continue;
         ctx.strokeStyle = ctx.fillStyle =
@@ -779,6 +1132,21 @@ export function initVideoWorkbench() {
           );
           ctx.fill();
         };
+        if (person.face && input("show-mesh").checked) {
+          ctx.save();
+          ctx.globalAlpha = 0.48;
+          ctx.lineWidth = Math.max(0.5, width / 1500);
+          ctx.beginPath();
+          for (const { start, end } of faceConnections) {
+            const a = person.face[start],
+              b = person.face[end];
+            if (!a || !b) continue;
+            ctx.moveTo(a.x * width, a.y * height);
+            ctx.lineTo(b.x * width, b.y * height);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
         if (person.face && input("show-face").checked) person.face.forEach(dot);
         if (person.pose && input("show-pose").checked) {
           const connections = [
@@ -816,6 +1184,25 @@ export function initVideoWorkbench() {
         );
       }
     }
+  }
+  function drawOverlay() {
+    const width = video.videoWidth || 1280,
+      height = video.videoHeight || 720;
+    overlay.width = width;
+    overlay.height = height;
+    const scale = Math.min(
+      video.clientWidth / width,
+      video.clientHeight / height,
+    );
+    overlay.style.width = `${width * scale}px`;
+    overlay.style.height = `${height * scale}px`;
+    overlay.style.left = `${(video.clientWidth - width * scale) / 2}px`;
+    overlay.style.top = `${(video.clientHeight - height * scale) / 2}px`;
+    const ctx = overlay.getContext("2d");
+    ctx.clearRect(0, 0, width, height);
+    const frame = currentFrame(),
+      selected = select("track").value;
+    paintPeople(ctx, width, height, frame, selected);
     const person = frame?.people.find((p) => p.id === selected);
     const expressions = el("expressions");
     expressions.replaceChildren();
@@ -839,10 +1226,12 @@ export function initVideoWorkbench() {
       meter.setAttribute("aria-label", label);
       const out = document.createElement("output");
       out.textContent = format(value, 2);
+      out.setAttribute("aria-live", "off");
       row.append(text, meter, out);
       expressions.append(row);
     }
-    el("clock").textContent = `${video.currentTime.toFixed(2)} s`;
+    el("clock").textContent =
+      `${(mode === "recording" ? (performance.now() - recordStart) / 1000 : video.currentTime).toFixed(2)} s`;
     document
       .querySelectorAll(".vw-cursor")
       .forEach(
@@ -892,11 +1281,7 @@ export function initVideoWorkbench() {
           : "Outer-eye distance units";
     if (!values.length) {
       ctx.fillStyle = "#9dafc2";
-      ctx.fillText(
-        "Analyze a clip to explore movement.",
-        20,
-        70,
-      );
+      ctx.fillText("Analyze a clip to explore movement.", 20, 70);
       return;
     }
     const lo = Math.min(...values),
@@ -950,7 +1335,10 @@ export function initVideoWorkbench() {
       const col = Math.floor((time / audio.duration) * audio.db.length);
       if (col >= audio.db.length) continue;
       for (let y = 0; y < spec.c.height - 20; y++) {
-        const bin = Math.min(127, Math.floor((1 - y / (spec.c.height - 20)) * 128));
+        const bin = Math.min(
+          127,
+          Math.floor((1 - y / (spec.c.height - 20)) * 128),
+        );
         const v = Math.max(0, Math.min(1, (audio.db[col][bin] + 80) / 80));
         const at = (y * spec.c.width + x) * 4;
         pixels.data[at] = Math.round(17 + 238 * v * v);
@@ -979,12 +1367,12 @@ export function initVideoWorkbench() {
   let animation = 0;
   function animate() {
     drawOverlay();
-    if (!video.paused && mode === "clip")
+    if (!video.paused && ["clip", "camera", "recording"].includes(mode))
       animation = requestAnimationFrame(animate);
   }
   video.addEventListener("play", () => {
     cancelAnimationFrame(animation);
-    if (mode === "clip") animate();
+    if (["clip", "camera", "recording"].includes(mode)) animate();
   });
   const observer = new ResizeObserver(() => {
     drawOverlay();
@@ -993,7 +1381,14 @@ export function initVideoWorkbench() {
   });
   observer.observe(video);
   const exportData = () => ({
-    schemaVersion: "1.0",
+    schemaVersion: "1.1",
+    overlayVideo: {
+      available: Boolean(overlayBlob),
+      type: overlayBlob?.type ?? null,
+      bytes: overlayBlob?.size ?? 0,
+      error: overlayError,
+    },
+    topology: { faceConnections },
     createdAt: new Date().toISOString(),
     buildVersion: BUILD_VERSION,
     environment: {
@@ -1043,6 +1438,10 @@ export function initVideoWorkbench() {
         : [{ id: "", kind: "no_detection", ambiguous: false }]
       ).map((p) => ({
         time_seconds: f.time,
+        capture_clock_ms: f.captureClockMs,
+        inference_latency_ms: f.inferenceLatencyMs,
+        source_media_time_seconds: f.sourceMediaTime,
+        acquisition_mode: run?.mode ?? "offline",
         track_id: p.id,
         track_kind: p.kind,
         ambiguous: p.ambiguous,

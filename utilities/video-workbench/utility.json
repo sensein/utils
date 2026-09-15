@@ -1,5 +1,5 @@
 {
   "title": "Video Workbench",
-  "summary": "Client-side camera recording and local video exploration with MediaPipe face and posture tracks, expression and coordination measures, aligned audio waveform/spectrogram, and JSON/CSV exports.",
+  "summary": "Client-side camera recording and local video exploration with continuous MediaPipe face-mesh and posture overlays, captured tracks, expression and coordination measures, aligned audio waveform/spectrogram, and JSON/CSV exports.",
   "live_page": "index.html"
 }

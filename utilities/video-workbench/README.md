@@ -15,19 +15,28 @@ Open http://localhost:8765/utilities/video-workbench/index.html. The existing ca
 
 ## Workflow
 
-1. **Collect:** enable the camera, optionally include microphone audio, record, and stop. Or choose a local MP4, WebM or MOV supported by your browser. Download the original recording at any time after capture.
-2. **Analyze:** select an interval, 5/15/30 samples per second, and up to four people. Face analysis always runs; posture is optional. Analysis runs on completed recordings, not the live preview. Cancel retains completed frames.
-3. **Explore:** select a face or posture track. Playback shows landmarks and expression coefficients; charts show the selected movement signal, waveform and spectrogram. Click charts or use the video's native controls to seek. “Isolate selected person” hides other people's overlays.
-4. **Export:** JSON contains the full sampled timeline, raw landmarks, blendshapes, transform matrices, pose world coordinates, summaries, model URLs, processing settings, browser provenance and partial-result flags. CSV contains one row per person per sample, with explicit `no_detection` rows when no person is detected. Download before clearing or closing the tab.
+1. **Collect continuously:** select the sample rate, people and posture settings, then enable the camera. Continuous MediaPipe estimation is enabled by default; models load before recording can start. Preview shows a face mesh, face keypoints and posture keypoints. Record and stop to retain timestamped estimates alongside the original video. Or choose a local MP4, WebM or MOV.
+2. **Choose overlays:** the **Show MediaPipe overlay** checkbox controls visibility independently of estimation and data capture. Mesh, face keypoints and posture keypoints have their own layer checkboxes. **Also save a video with overlays** records a second downloadable video with the visible layers and microphone audio; the original video is retained separately. Turning off display never stops landmark capture.
+3. **Analyze existing clips:** select an interval, 5/15/30 samples per second, and up to four people. Face analysis always runs; posture is optional. Cancel retains completed frames. Reanalysis replaces the active results, so export live data first if you want to preserve that run.
+4. **Explore:** select a face or posture track. Playback shows landmarks and expression coefficients; charts show the selected movement signal, waveform and spectrogram. Click charts or use the video's native controls to seek. “Isolate selected person” hides other people's overlays.
+5. **Export:** JSON contains the full sampled timeline, raw landmarks, blendshapes, transform matrices, pose world coordinates, summaries, model URLs, processing settings, browser provenance and partial-result flags. CSV contains one row per person per sample, with explicit `no_detection` rows when no person is detected. Download before clearing or closing the tab.
 
 ## Privacy and resources
 
 - Videos, audio, landmarks and measurements are processed in browser memory. No uploads, analytics, local storage or backend calls are used.
-- Model inference is lazy: starting analysis downloads the pinned MediaPipe 0.10.32 runtime/WASM from jsDelivr and revision-1 face/pose model files from Google Storage. Network access is required on first use; cache availability is browser-controlled. These hosts receive normal asset-request information, not the recording.
+- Model inference is lazy: enabling the camera with continuous estimation selected, or starting clip analysis, downloads the pinned MediaPipe 0.10.32 runtime/WASM from jsDelivr and revision-1 face/pose model files from Google Storage. Network access is required on first use; cache availability is browser-controlled. These hosts receive normal asset-request information, not the recording.
 - Closing/clearing stops camera/microphone tracks, terminates workers, closes audio contexts and releases media object URLs. A failed/unsupported audio decode leaves video analysis usable.
-- Files are limited to 250 MiB and five minutes. Recording targets 4 Mbps and stops at five minutes or near 250 MiB (chunk boundaries can slightly exceed limits). At most 4,500 requested samples across selected people are allowed per run: a four-person setting permits at most 1,125 sampled frames.
+- Files are limited to 250 MiB and five minutes. Each video encoder targets 4 Mbps. Recording stops at five minutes, near 250 MiB combined across original/overlay videos (chunk boundaries can slightly exceed limits), or when live estimates reach the sample budget. At most 4,500 requested samples across selected people are allowed per run: a four-person setting permits at most 1,125 sampled frames.
 - CPU inference runs in a dedicated worker; STFT computation runs in another worker. Sequential seeking can be slow for long-GOP videos. Short, well-lit clips are best.
 - Camera/microphone permission, codecs and worker support depend on the browser. Chromium was verified with simulated devices; physical cameras and Safari/Firefox need a hardware/browser check before study use.
+
+## Continuous capture details
+
+- Live inference processes at most one presented camera frame at a time. Excess frames are skipped, not queued. The UI reports achieved rate and latency; JSON reports skipped camera callbacks and achieved samples/second. A requested 15 Hz does not guarantee 15 estimates/second.
+- Estimates are timestamped at input capture using `performance.now()`, relative to recording start; camera media time and inference latency are also exported. Preview samples and in-flight samples crossing start/stop boundaries are excluded. Playback finds the nearest actual timestamp rather than assuming evenly spaced frames.
+- Hiding the overlay does not pause processing. JSON retains visibility-change events and the official face-mesh connections. The overlay video shows the latest available result on the current video frame; estimates older than 0.5 seconds disappear. This is a latency-bearing live display, not frame-perfect offline annotation. The overlay encoder's start offset is exported.
+- Keep the tab visible during capture: browsers can throttle background rendering and frame callbacks. Gaps remain visible in exported timestamps. No every-source-frame or hardware-level synchronization guarantee is made.
+- If live inference fails, raw recording continues and completed estimates remain marked partial with the error. Failure to create the overlay video leaves raw video/data available. Clear session, camera-off and page exit stop inference and release media; clearing intentionally discards unsaved data.
 
 ## Measurements and limitations
 
@@ -43,11 +52,11 @@ See [the design and validation record](../../docs/video_workbench_design.md) and
 
 ## Files and checks
 
-All distributable code lives in this folder. `workbench.js` manages capture/playback and exports, `inference.worker.js` runs MediaPipe, `audio.worker.js` computes acoustic displays, `metrics.mjs` contains testable numerical/tracking routines, and `models.js` pins remote asset URLs. A classic inference worker is intentional: MediaPipe's WASM loader uses `importScripts`; dynamic module imports inside that worker load the runtime. The audio worker is a native module.
+Live timing and nearest-sample playback are tested in `live.mjs`; `overlay-recording.js` owns the optional canvas recorder and cloned audio tracks. All distributable code lives in this folder. `workbench.js` manages capture/playback and exports, `inference.worker.js` runs MediaPipe, `audio.worker.js` computes acoustic displays, `metrics.mjs` contains testable numerical/tracking routines, and `models.js` pins remote asset URLs. A classic inference worker is intentional: MediaPipe's WASM loader uses `importScripts`; dynamic module imports inside that worker load the runtime. The audio worker is a native module.
 
 ```sh
 uv run pytest
-node --test tests/video-metrics.test.mjs
+node --test tests/video-metrics.test.mjs tests/video-live.test.mjs
 node --check utilities/video-workbench/workbench.js
 node --check utilities/video-workbench/inference.worker.js
 node --check utilities/video-workbench/audio.worker.js

@@ -62,3 +62,27 @@ Physical camera/microphone hardware, Safari/Firefox, long recordings at resource
 ### Repository coordination
 
 Implementation is on `codex/video-workbench` in `sensein/utils`. The original `sensein.github.io` checkout is untouched. GitHub project-board access is unavailable with the current token (missing `read:project` scope); the plan and checked implementation record are maintained here.
+
+## Continuous estimation and overlay capture extension (implemented)
+
+Requested: optional face-mesh/keypoint overlay, continuous camera estimation, and capture of results. The display checkbox must not stop estimation or discard recorded data.
+
+- [x] Add independent overlay visibility, face triangulation, and keypoint controls.
+- [x] Run a bounded continuous worker loop on presented camera frames; report achieved rate/skipped frames instead of claiming every frame was estimated.
+- [x] Timestamp estimates against recording start, exclude preview/in-flight boundary frames, preserve raw live results after stop, and replay irregular sample times correctly.
+- [x] Optionally record a second canvas-composited video with visible overlays and microphone audio while preserving the original video.
+- [x] Test scheduling, timestamp boundaries, gaps, reset/failure cleanup, real continuous inference, checkbox toggles, and exported data/video.
+
+Live results are captured for completed inference frames only. At most one inference is in flight; slow devices skip frames rather than queue increasingly stale input. Latest overlays expire after 0.5 seconds, with capture timestamp and inference latency retained. Resource limits stop recording instead of silently dropping the remaining results. The optional overlay video uses the latest available estimate (latency is visible in exported metadata); it is not a frame-perfect offline rendering.
+
+
+### Extension validation
+
+- Four additional Node tests cover one-in-flight throttling, recording-relative timestamps and start/stop epochs, duplicate camera frame suppression, and nearest-time replay of irregular samples. Together with the existing tests, 18 Node tests and 2 Python packaging tests pass.
+- Real MediaPipe inference against a simulated camera source captured 49 samples in approximately 4.4 seconds, including 18 while the master overlay checkbox was unchecked. JSON preserved 2,556 official mesh connections, source media times, capture times, latency, visibility events and achieved rate. All timestamps were increasing and within the recording interval.
+- Both original and composited WebM files downloaded. The overlay video contained VP9 video and Opus audio. Decoded frames showed mesh/posture overlays with the checkbox on and the plain camera image with it off.
+- Browser checks passed for live enable/disable, capture without an overlay file or microphone, worker failure during recording with partial data retention, stale-overlay expiry after 0.5 seconds, model-download failure with ordinary recording still available, reset during model startup, and offline reanalysis.
+- Instrumented reset during overlay recording verified original camera/microphone tracks, canvas stream tracks and cloned microphone tracks all ended. Injected canvas-recording failure preserved raw video and estimates. A simulated six-sample budget stopped the recording and exported exactly six samples with `stopReason: sample_limit`.
+- Desktop and 390 px mobile layouts were checked; no horizontal overflow. Physical hardware, background-tab behavior across browsers, long-run performance and real multi-person tracking accuracy remain unvalidated.
+
+Browser API references: [video-frame callbacks](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback) and [canvas capture streams](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/captureStream).

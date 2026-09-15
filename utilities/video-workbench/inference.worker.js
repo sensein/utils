@@ -4,7 +4,9 @@ self.onmessage = async ({ data }) => {
   try {
     if (data.type === "init") {
       const { MODEL_INFO } = await import("./models.js");
-      const { FaceLandmarker, PoseLandmarker, FilesetResolver } = await import(MODEL_INFO.bundle);
+      const { FaceLandmarker, PoseLandmarker, FilesetResolver } = await import(
+        MODEL_INFO.bundle
+      );
       face?.close();
       pose?.close();
       face = undefined;
@@ -30,7 +32,11 @@ self.onmessage = async ({ data }) => {
           minPosePresenceConfidence: 0.5,
           minTrackingConfidence: 0.5,
         });
-      self.postMessage({ id: data.id, ready: true });
+      self.postMessage({
+        id: data.id,
+        ready: true,
+        faceConnections: FaceLandmarker.FACE_LANDMARKS_TESSELATION,
+      });
     } else if (data.type === "frame") {
       try {
         const faces = face.detectForVideo(data.bitmap, data.timestamp);

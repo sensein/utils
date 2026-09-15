@@ -18,7 +18,7 @@
           <div>
             <p class="vw-eyebrow">
               Capture · follow · measure
-              <span class="vw-version">26.09.15</span>
+              <span class="vw-version">26.09.15-live.1</span>
             </p>
             <h1>Video workbench</h1>
             <p class="vw-lede">
@@ -58,6 +58,21 @@
               ><input id="vw-mic" type="checkbox" checked /> Include microphone
               audio</label
             >
+            <div class="vw-live-options">
+              <label class="vw-check"
+                ><input id="vw-live" type="checkbox" checked /> Continuous
+                MediaPipe estimation</label
+              >
+              <label class="vw-check"
+                ><input id="vw-save-overlay" type="checkbox" checked /> Also
+                save a video with overlays</label
+              >
+              <p class="vw-small">
+                Uses the sample rate, people and posture settings below. All
+                completed estimates are saved while recording, including when
+                the overlay is hidden.
+              </p>
+            </div>
             <button id="vw-camera" class="vw-button vw-primary">
               Enable camera
             </button>
@@ -84,14 +99,18 @@
             />
             <p class="vw-small">
               Camera access needs HTTPS or localhost. Recording stops
-              automatically at five minutes or about 250 MB. Analysis runs on
-              the completed clip.
+              automatically at five minutes or about 250 MB. You can analyze
+              completed clips too. Live recording stops at the estimation sample
+              limit.
             </p>
             <div class="vw-buttons">
               <button id="vw-download" class="vw-button" disabled>
                 Download video</button
               ><button id="vw-reset" class="vw-button">Clear session</button>
             </div>
+            <button id="vw-download-overlay" class="vw-button" disabled>
+              Download overlay video
+            </button>
           </aside>
           <section class="vw-panel vw-preview">
             <div class="vw-panel-top">
@@ -142,16 +161,32 @@
             </div>
             <div class="vw-playback">
               <label class="vw-check"
+                ><input id="vw-show-overlay" type="checkbox" checked /> Show
+                MediaPipe overlay</label
+              >
+              <label class="vw-check"
+                ><input id="vw-show-mesh" type="checkbox" checked /> Face
+                mesh</label
+              >
+              <label class="vw-check"
                 ><input id="vw-show-face" type="checkbox" checked /> Face
-                landmarks</label
+                keypoints</label
               ><label class="vw-check"
-                ><input id="vw-show-pose" type="checkbox" checked />
-                Posture</label
+                ><input id="vw-show-pose" type="checkbox" checked /> Posture
+                keypoints</label
               ><label class="vw-check"
                 ><input id="vw-follow" type="checkbox" /> Isolate selected
                 person</label
               >
             </div>
+            <p
+              id="vw-live-status"
+              class="vw-small vw-live-status"
+              aria-live="off"
+            >
+              Enable the camera to start continuous estimation. Visibility does
+              not affect data capture.
+            </p>
             <div
               id="vw-status"
               class="vw-status"
@@ -173,7 +208,10 @@
           <div class="vw-section-heading">
             <span class="vw-number">02</span>
             <h2>Analyze movement</h2>
-            <span class="vw-small">Choose a time range, then run locally.</span>
+            <span class="vw-small"
+              >Set capture options before enabling the camera, or analyze a
+              recorded interval.</span
+            >
           </div>
           <fieldset id="vw-settings" class="vw-settings">
             <label class="vw-field"
@@ -333,9 +371,10 @@
           <div>
             <h2>Take your work with you</h2>
             <p class="vw-small">
-              JSON includes raw landmarks, all blendshapes, tracks, processing
-              settings and summaries. CSV contains one row per person per
-              sampled time. Missing values stay empty.
+              JSON includes captured timestamps, latency, raw landmarks, all
+              blendshapes, tracks, processing settings and summaries. CSV
+              contains one row per person per sampled time. Missing values stay
+              empty.
             </p>
           </div>
           <div class="vw-buttons">
@@ -351,6 +390,14 @@
           <div class="vw-method-grid">
             <div>
               <h3>What the measurements mean</h3>
+              <p>
+                Continuous camera estimation captures completed results while
+                recording. The overlay checkbox changes display only. Live
+                inference skips frames when busy; exported timestamps, achieved
+                rate and latency describe what was captured. Keep this tab
+                visible. The optional overlay video uses the latest estimate and
+                hides it after 0.5 seconds without a fresh result.
+              </p>
               <p>
                 Lip aperture (landmarks 13–14) and width (61–291) are pixel
                 distances divided by outer-eye distance (33–263). Lower lip (14)
