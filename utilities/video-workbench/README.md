@@ -15,10 +15,10 @@ Open http://localhost:8765/utilities/video-workbench/index.html. The existing ca
 
 ## Workflow
 
-1. **Collect continuously:** select the sample rate, people and posture settings, then enable the camera. Continuous MediaPipe estimation is enabled by default; models load before recording can start. Preview shows a face mesh, face keypoints and posture keypoints. Record and stop to retain timestamped estimates alongside the original video. Or choose a local MP4, WebM or MOV.
+1. **Collect continuously:** open **Recording & analysis settings**, select the sample rate, people and posture settings, then enable the camera. Continuous MediaPipe estimation is enabled by default; models load before recording can start. Preview shows a face mesh, face keypoints and posture keypoints. Record and stop to retain timestamped estimates alongside the original video. Or choose a local MP4, WebM or MOV.
 2. **Choose overlays:** the **Show MediaPipe overlay** checkbox controls visibility independently of estimation and data capture. Mesh, face keypoints and posture keypoints have their own layer checkboxes. **Also save a video with overlays** records a second downloadable video with the visible layers and microphone audio; the original video is retained separately. Turning off display never stops landmark capture.
 3. **Analyze existing clips:** select an interval, 5/15/30 samples per second, and up to four people. Face analysis always runs; posture is optional. Cancel retains completed frames. Reanalysis replaces the active results, so export live data first if you want to preserve that run.
-4. **Explore:** select a face or posture track. Playback shows landmarks and expression coefficients; charts show the selected movement signal, waveform and spectrogram. Click charts or use the video's native controls to seek. “Isolate selected person” hides other people's overlays.
+4. **Explore:** select a face or posture track. Video remains visible while the analysis pane scrolls through aligned signals, person summaries and sampled measurements. Use **Time window** to zoom, **Visible interval** to pan, or horizontal/Shift-scroll over any chart. All three signals share the same interval. Click a chart or sample timestamp to seek; the **Playback** slider also supports keyboard seeking. **Follow playback** advances the charts and scrolls to the current sample; manual panning turns it off. Summaries use the full analyzed interval, regardless of zoom. “Isolate selected person” is under **Overlay options**.
 5. **Export:** JSON contains the full sampled timeline, raw landmarks, blendshapes, transform matrices, pose world coordinates, summaries, model URLs, processing settings, browser provenance and partial-result flags. CSV contains one row per person per sample, with explicit `no_detection` rows when no person is detected. Download before clearing or closing the tab.
 
 ## Privacy and resources
@@ -52,11 +52,11 @@ See [the design and validation record](../../docs/video_workbench_design.md) and
 
 ## Files and checks
 
-Live timing and nearest-sample playback are tested in `live.mjs`; `overlay-recording.js` owns the optional canvas recorder and cloned audio tracks. All distributable code lives in this folder. `workbench.js` manages capture/playback and exports, `inference.worker.js` runs MediaPipe, `audio.worker.js` computes acoustic displays, `metrics.mjs` contains testable numerical/tracking routines, and `models.js` pins remote asset URLs. A classic inference worker is intentional: MediaPipe's WASM loader uses `importScripts`; dynamic module imports inside that worker load the runtime. The audio worker is a native module.
+Shared timeline bounds and seeking are tested in `timeline.mjs`; live timing and nearest-sample playback are tested in `live.mjs`; `overlay-recording.js` owns the optional canvas recorder and cloned audio tracks. All distributable code lives in this folder. `workbench.js` manages capture/playback and exports, `inference.worker.js` runs MediaPipe, `audio.worker.js` computes acoustic displays, `metrics.mjs` contains testable numerical/tracking routines, and `models.js` pins remote asset URLs. A classic inference worker is intentional: MediaPipe's WASM loader uses `importScripts`; dynamic module imports inside that worker load the runtime. The audio worker is a native module.
 
 ```sh
 uv run pytest
-node --test tests/video-metrics.test.mjs tests/video-live.test.mjs
+node --test tests/video-*.test.mjs
 node --check utilities/video-workbench/workbench.js
 node --check utilities/video-workbench/inference.worker.js
 node --check utilities/video-workbench/audio.worker.js

@@ -86,3 +86,21 @@ Live results are captured for completed inference frames only. At most one infer
 - Desktop and 390 px mobile layouts were checked; no horizontal overflow. Physical hardware, background-tab behavior across browsers, long-run performance and real multi-person tracking accuracy remain unvalidated.
 
 Browser API references: [video-frame callbacks](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback) and [canvas capture streams](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/captureStream).
+
+## Compact, linked review layout
+
+Keep video visible alongside a scrollable analysis pane. Place everyday capture actions in a toolbar and fold infrequent recording/analysis settings into a disclosure. Signals, person summaries and sampled measurements share the same review pane. On narrow screens the video stays above the scrolling document with a bounded height.
+
+A shared time window controls movement, waveform and spectrogram. Zoom selects a duration; a range control and horizontal/Shift-wheel scrolling pan all three together. Clicking a chart or timestamp seeks the video; playback updates cursors and the selected sample. Follow playback is independently switchable and manual panning disables it so the view does not snap back. Summaries still describe the complete analyzed interval. Exports and continuous capture remain unchanged.
+
+- [x] Reorganize controls, reduce spacing, keep the video visible during review.
+- [x] Add shared zoom/pan, keyboard-accessible playback seeking and follow mode.
+- [x] Add a scrollable sampled-measurement table with linked timestamps/highlight.
+- [x] Verify boundary calculations, browser synchronization, recording regression and desktop/mobile layout; push the refinement.
+
+### Linked review validation
+
+- Wrote failing tests before adding shared window logic. All 21 Node tests and 2 Python packaging tests pass, including full/short/empty clips, boundary clamping, zoomed seeking and playback following.
+- Chromium: a two-second clip produced 30 actual MediaPipe samples. Chart clicks seek within the zoomed window, playback highlights the matching sample, off-window cursors hide, all three cursors stay aligned, manual range/horizontal scrolling releases follow mode, and sample timestamps seek back to video. Switching signals updates the table; switching people loads the second track's samples.
+- Continuous simulated-camera recording still retains estimates while the master overlay is hidden and produces the separate overlay video. Playback advances the visible interval and scrolls the current sample into view. Waveform/spectrogram clicks and keyboard seeking pass. Silent source replacement and reset clear the review state.
+- Reviewed 1440×1000 desktop and 390×844 mobile screenshots. Scrolling the desktop analysis pane leaves video in place. Mobile keeps a bounded-height video above the document; no horizontal page overflow. No uncaught browser errors were observed. MediaPipe's normal CPU delegate messages are logged at console error level.

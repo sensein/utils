@@ -15,7 +15,7 @@ def test_video_workbench_is_published_with_its_assets(tmp_path: Path) -> None:
     assert video["live_url"].endswith("/utils/utilities/video-workbench/index.html")
     assert any(e["slug"] == "streaming-audio-workbench" for e in entries)
     packaged = tmp_path / "site" / "utilities" / "video-workbench"
-    for name in ["index.html", "workbench.css", "workbench.js", "metrics.mjs", "models.js", "inference.worker.js", "audio.worker.js", "live.mjs", "overlay-recording.js"]:
+    for name in ["index.html", "workbench.css", "workbench.js", "metrics.mjs", "models.js", "inference.worker.js", "audio.worker.js", "live.mjs", "overlay-recording.js", "timeline.mjs"]:
         assert (packaged / name).read_bytes() == (root / "utilities" / "video-workbench" / name).read_bytes()
     html = (packaged / "index.html").read_text()
     assert (packaged / "../../index.html").resolve().is_file()

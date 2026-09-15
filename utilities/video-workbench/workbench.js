@@ -1,3 +1,4 @@
+import { timeWindow, timeAt, followWindow } from "./timeline.mjs";
 import { LiveClock, nearestFrame } from "./live.mjs";
 import { OverlayRecording } from "./overlay-recording.js";
 import { MODEL_INFO } from "./models.js";
@@ -9,7 +10,7 @@ import {
   summarize,
   toCSV,
 } from "./metrics.mjs";
-export const BUILD_VERSION = "26.09.15-live.1";
+export const BUILD_VERSION = "26.09.15-review.1";
 const MAX_BYTES = 250 * 1024 * 1024,
   MAX_SECONDS = 300,
   MAX_FRAMES = 4500;
@@ -49,6 +50,12 @@ export function initVideoWorkbench() {
   let annotated = null,
     overlayBlob = null,
     overlayError = null;
+  let viewStart = 0;
+  let sampleRows = [],
+    sampleElements = [],
+    activeSample = null;
+  const view = () =>
+    timeWindow(duration, Number(select("zoom").value), viewStart);
   const pending = new Map();
   function status(message, error = false) {
     el("status").textContent = message;
@@ -85,6 +92,10 @@ export function initVideoWorkbench() {
       ["loading", "finishing", "analyzing"].includes(mode);
     el("empty").hidden = mode !== "empty";
     video.controls = mode === "clip";
+    select("zoom").disabled = input("seek").disabled = mode !== "clip";
+    input("follow-playback").disabled = mode !== "clip";
+    input("pan").disabled = mode !== "clip" || view().span >= duration;
+    updateTimelineControls();
   }
   function terminateWorker() {
     worker?.terminate();
@@ -119,6 +130,7 @@ export function initVideoWorkbench() {
   function clearResults() {
     frames = [];
     run = null;
+    renderSamples();
     select("track").replaceChildren(
       new Option("Analyze video to find people", ""),
     );
@@ -161,6 +173,9 @@ export function initVideoWorkbench() {
     mediaURL = "";
     media = null;
     duration = 0;
+    viewStart = 0;
+    select("zoom").value = "0";
+    input("follow-playback").checked = true;
     audio = null;
   }
   function reset() {
@@ -284,7 +299,7 @@ export function initVideoWorkbench() {
       );
       el("live-status").textContent = captured?.run
         ? `${frames.length} live estimates retained · ${(captured.run.achievedSamplesPerSecond ?? 0).toFixed(1)} /s achieved. Playback overlays can be shown or hidden independently.`
-        : "Camera capture supports continuous estimation. Analyze this local clip using the interval controls below.";
+        : "Camera capture supports continuous estimation. Analyze this local clip using Recording & analysis settings.";
       controls();
       drawMotion();
       void decodeAudio(blob, generation);
@@ -1050,6 +1065,7 @@ export function initVideoWorkbench() {
     updateSummary();
   }
   function updateSummary() {
+    renderSamples();
     const rows = rowsFor(select("track").value);
     const container = el("metrics");
     container.replaceChildren();
@@ -1089,7 +1105,11 @@ export function initVideoWorkbench() {
     recordOverlayChoice();
     updateSummary();
   };
-  select("signal").onchange = drawMotion;
+  select("signal").onchange = () => {
+    drawMotion();
+    renderSamples();
+    syncTimeline();
+  };
   for (const key of [
     "show-overlay",
     "show-mesh",
@@ -1232,13 +1252,112 @@ export function initVideoWorkbench() {
     }
     el("clock").textContent =
       `${(mode === "recording" ? (performance.now() - recordStart) / 1000 : video.currentTime).toFixed(2)} s`;
-    document
-      .querySelectorAll(".vw-cursor")
-      .forEach(
-        (c) =>
-          (c.style.left = `${duration ? Math.min(100, (video.currentTime / duration) * 100) : 0}%`),
-      );
+    syncTimeline();
   }
+  function updateTimelineControls() {
+    const w = view();
+    input("seek").max = String(duration);
+    input("pan").max = String(Math.max(0, duration - w.span));
+    input("pan").value = String(w.start);
+    input("pan").disabled = mode !== "clip" || w.span >= duration;
+    el("window-label").textContent =
+      `${w.start.toFixed(2)}–${w.end.toFixed(2)} s`;
+  }
+  function redrawTimeline() {
+    updateTimelineControls();
+    drawMotion();
+    drawAudio();
+    syncTimeline();
+  }
+  function syncTimeline() {
+    let w = view();
+    if (mode === "clip" && input("follow-playback").checked) {
+      const next = followWindow(w, video.currentTime, duration);
+      if (next.start !== w.start) {
+        viewStart = next.start;
+        w = next;
+        updateTimelineControls();
+        drawMotion();
+        drawAudio();
+      }
+    }
+    const time = mode === "clip" ? video.currentTime : 0;
+    input("seek").value = String(time);
+    el("playback-time").textContent =
+      `${time.toFixed(2)} / ${duration.toFixed(2)} s`;
+    document.querySelectorAll(".vw-cursor").forEach((cursor) => {
+      cursor.hidden = mode !== "clip" || time < w.start || time > w.end;
+      cursor.style.left = `${w.span ? ((time - w.start) / w.span) * 100 : 0}%`;
+    });
+    const frame = mode === "clip" ? currentFrame() : null;
+    const row = frame ? nearestFrame(sampleRows, frame.time, 0.000001) : null;
+    const next = row ? sampleElements[sampleRows.indexOf(row)] : null;
+    if (activeSample !== next) {
+      activeSample?.removeAttribute("aria-current");
+      activeSample = next;
+      next?.setAttribute("aria-current", "true");
+      if (next && input("follow-playback").checked) {
+        // Scroll only this table, never move the document or the analysis pane.
+        const scroller = el("sample-scroll");
+        const top = next.offsetTop;
+        if (
+          top < scroller.scrollTop + 36 ||
+          top + next.offsetHeight > scroller.scrollTop + scroller.clientHeight
+        )
+          scroller.scrollTop = Math.max(0, top - scroller.clientHeight / 2);
+      }
+    }
+  }
+  function renderSamples() {
+    sampleRows = rowsFor(select("track").value);
+    activeSample = null;
+    const key = select("signal").value;
+    el("sample-signal").textContent =
+      select("signal").selectedOptions[0].textContent.trim();
+    const fragment = document.createDocumentFragment();
+    sampleElements = sampleRows.map((row) => {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      const seekButton = document.createElement("button");
+      seekButton.textContent = row.time.toFixed(3);
+      seekButton.setAttribute(
+        "aria-label",
+        `Seek video to ${row.time.toFixed(3)} seconds`,
+      );
+      seekButton.onclick = () => {
+        if (mode !== "clip") return;
+        video.currentTime = row.time;
+        viewStart = followWindow(view(), row.time, duration).start;
+        redrawTimeline();
+      };
+      td.append(seekButton);
+      tr.append(td);
+      for (const metric of [key, "jawOpen", "headRoll"]) {
+        const cell = document.createElement("td");
+        cell.textContent = format(row.metrics?.[metric]);
+        tr.append(cell);
+      }
+      fragment.append(tr);
+      return tr;
+    });
+    el("sample-rows").replaceChildren(fragment);
+    el("sample-count").textContent = `${sampleRows.length} samples`;
+    el("sample-empty").hidden = Boolean(sampleRows.length);
+  }
+  select("zoom").onchange = () => {
+    viewStart = video.currentTime - Number(select("zoom").value) * 0.2;
+    redrawTimeline();
+  };
+  input("pan").oninput = () => {
+    input("follow-playback").checked = false;
+    viewStart = Number(input("pan").value);
+    redrawTimeline();
+  };
+  input("seek").oninput = () => {
+    if (mode === "clip") video.currentTime = Number(input("seek").value);
+  };
+  input("follow-playback").onchange = syncTimeline;
+
   function canvas(id) {
     const c = el(id);
     c.width = Math.max(260, Math.round(c.clientWidth || 900));
@@ -1258,7 +1377,7 @@ export function initVideoWorkbench() {
       ctx.lineTo(x, height);
       ctx.stroke();
       ctx.fillText(
-        ((duration * i) / 4).toFixed(1) + " s",
+        (view().start + (view().span * i) / 4).toFixed(2) + " s",
         Math.min(x + 4, width - 45),
         height - 5,
       );
@@ -1297,7 +1416,7 @@ export function initVideoWorkbench() {
         previous = null;
         continue;
       }
-      const x = (row.time / duration) * c.width,
+      const x = ((row.time - view().start) / (view().span || 1)) * c.width,
         y = 15 + (1 - (v - lo) / range) * (c.height - 45);
       if (previous === null || row.time - previous > 1.6 / (run?.fps ?? 15))
         ctx.moveTo(x, y);
@@ -1323,7 +1442,9 @@ export function initVideoWorkbench() {
     wave.ctx.beginPath();
     audio.wave.forEach(([lo, hi], i) => {
       const x =
-        (((i / audio.wave.length) * audio.duration) / duration) * wave.c.width;
+        (((i / audio.wave.length) * audio.duration - view().start) /
+          (view().span || 1)) *
+        wave.c.width;
       wave.ctx.moveTo(x, (0.5 - hi * 0.42) * (wave.c.height - 20));
       wave.ctx.lineTo(x, (0.5 - lo * 0.42) * (wave.c.height - 20));
     });
@@ -1331,9 +1452,9 @@ export function initVideoWorkbench() {
     axes(wave.ctx, wave.c.width, wave.c.height);
     const pixels = spec.ctx.createImageData(spec.c.width, spec.c.height);
     for (let x = 0; x < spec.c.width; x++) {
-      const time = (x / spec.c.width) * duration;
+      const time = timeAt(view(), x / spec.c.width);
       const col = Math.floor((time / audio.duration) * audio.db.length);
-      if (col >= audio.db.length) continue;
+      if (col < 0 || col >= audio.db.length) continue;
       for (let y = 0; y < spec.c.height - 20; y++) {
         const bin = Math.min(
           127,
@@ -1353,13 +1474,33 @@ export function initVideoWorkbench() {
       `Frequency · 0–${audio.maxHz / 1000} kHz (bottom to top)`;
   }
   for (const id of ["motion", "wave", "spec"]) {
+    el(id).addEventListener(
+      "wheel",
+      (event) => {
+        const delta = event.deltaX || (event.shiftKey ? event.deltaY : 0);
+        if (!delta || mode !== "clip" || view().span >= duration) return;
+        event.preventDefault();
+        input("follow-playback").checked = false;
+        const pixels =
+          delta *
+          (event.deltaMode === 1
+            ? 16
+            : event.deltaMode === 2
+              ? el(id).clientWidth
+              : 1);
+        viewStart = timeWindow(
+          duration,
+          view().span,
+          view().start + (pixels / el(id).clientWidth) * view().span,
+        ).start;
+        redrawTimeline();
+      },
+      { passive: false },
+    );
     el(id).onclick = (e) => {
       if (mode !== "clip" || !duration) return;
       const rect = el(id).getBoundingClientRect();
-      video.currentTime = Math.max(
-        0,
-        Math.min(duration, ((e.clientX - rect.left) / rect.width) * duration),
-      );
+      video.currentTime = timeAt(view(), (e.clientX - rect.left) / rect.width);
     };
   }
   video.addEventListener("timeupdate", drawOverlay);
@@ -1380,6 +1521,7 @@ export function initVideoWorkbench() {
     drawAudio();
   });
   observer.observe(video);
+  observer.observe(el("motion"));
   const exportData = () => ({
     schemaVersion: "1.1",
     overlayVideo: {
