@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Video Workbench · SenseIn Utils</title>
+    <meta
+      name="description"
+      content="Client-side camera recording, video analysis, face and posture tracking, expression and coordination measures, waveform and spectrogram."
+    />
+    <link rel="stylesheet" href="workbench.css" />
+  </head>
+  <body>
+    <main>
+      <div class="vw" id="video-workbench">
+        <a class="vw-back" href="../../index.html">← SenseIn Utils</a>
+        <header class="vw-heading">
+          <div>
+            <p class="vw-eyebrow">
+              Capture · follow · measure
+              <span class="vw-version">26.09.15-review.1</span>
+            </p>
+            <h1>Video workbench</h1>
+            <p class="vw-lede">
+              A closer look at movement, expression, and speech.
+            </p>
+          </div>
+          <span class="vw-local"><span></span> Processed on your device</span>
+        </header>
+        <p class="vw-audio-link vw-small">
+          <a href="../streaming-audio-workbench/streaming_audio_workbench.html"
+            >Open the audio workbench ↗</a
+          >
+        </p>
+        <p class="vw-privacy">
+          Media stays in this tab. Only models are downloaded; your video is
+          never uploaded. Save your recordings and results before closing.
+        </p>
+        <noscript
+          >This workbench needs JavaScript to record and analyze video
+          locally.</noscript
+        >
+        <section class="vw-panel vw-collection">
+          <div class="vw-action-toolbar">
+            <button id="vw-camera" class="vw-button vw-primary">
+              Enable camera
+            </button>
+            <button id="vw-record" class="vw-button" disabled>
+              Start recording
+            </button>
+            <button id="vw-stop" class="vw-button" disabled>Stop</button>
+            <button id="vw-camera-off" class="vw-button" disabled>
+              Turn camera off
+            </button>
+            <label class="vw-file-control"
+              >Open video<input
+                id="vw-file"
+                type="file"
+                accept="video/*,.webm,.mp4,.mov,.m4v"
+            /></label>
+            <button id="vw-analyze" class="vw-button vw-primary" disabled>
+              Analyze video
+            </button>
+            <button id="vw-cancel" class="vw-button" disabled>
+              Cancel analysis
+            </button>
+          </div>
+          <details class="vw-setup">
+            <summary>Recording &amp; analysis settings</summary>
+            <div class="vw-setup-grid">
+              <div class="vw-record-options">
+                <label class="vw-field"
+                  >Recording size<select id="vw-resolution">
+                    <option value="1280">720p · balanced</option>
+                    <option value="640">480p · lighter</option>
+                    <option value="1920">1080p · detailed</option>
+                  </select></label
+                >
+                <label class="vw-check"
+                  ><input id="vw-mic" type="checkbox" checked /> Include
+                  microphone audio</label
+                >
+                <div class="vw-live-options">
+                  <label class="vw-check"
+                    ><input id="vw-live" type="checkbox" checked /> Continuous
+                    MediaPipe estimation</label
+                  >
+                  <label class="vw-check"
+                    ><input id="vw-save-overlay" type="checkbox" checked /> Also
+                    save a video with overlays</label
+                  >
+                  <p class="vw-small">
+                    Uses the sample rate, people and posture analysis settings.
+                    All completed estimates are saved while recording, including
+                    when the overlay is hidden.
+                  </p>
+                </div>
+              </div>
+              <div>
+                <fieldset id="vw-settings" class="vw-settings">
+                  <label class="vw-field"
+                    >Samples / second<select id="vw-fps">
+                      <option value="5">5 · quick scan</option>
+                      <option value="15" selected>15 · movement</option>
+                      <option value="30">30 · detailed</option>
+                    </select></label
+                  >
+                  <label class="vw-field"
+                    >People in view<select id="vw-people">
+                      <option value="1">1 person</option>
+                      <option value="2">Up to 2</option>
+                      <option value="4">Up to 4</option>
+                    </select></label
+                  >
+                  <label class="vw-field"
+                    >Start (s)<input
+                      id="vw-start"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value="0"
+                  /></label>
+                  <label class="vw-field"
+                    >End (s)<input
+                      id="vw-end"
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      placeholder="Clip end"
+                  /></label>
+                  <label class="vw-field"
+                    >Outer-eye distance (mm)<input
+                      id="vw-calibration"
+                      type="number"
+                      min="30"
+                      max="150"
+                      step="0.1"
+                      placeholder="Optional · single person"
+                  /></label>
+                  <label class="vw-check"
+                    ><input id="vw-pose" type="checkbox" checked /> Estimate
+                    posture</label
+                  >
+                </fieldset>
+
+                <p class="vw-small">
+                  Set options before enabling the camera. Up to 4,500 samples
+                  across selected people; calibration applies to one person.
+                  Recording stops at 5 minutes, 250 MB or the sample limit.
+                  Camera access requires HTTPS or localhost.
+                </p>
+              </div>
+            </div>
+          </details>
+        </section>
+        <div class="vw-workspace">
+          <section class="vw-panel vw-preview">
+            <div class="vw-panel-top">
+              <h2>Video &amp; tracks</h2>
+              <span id="vw-source" class="vw-small">No video loaded</span>
+            </div>
+            <div class="vw-stage">
+              <video
+                id="vw-video"
+                playsinline
+                controls
+                aria-label="Video playback"
+              ></video>
+              <canvas
+                id="vw-overlay"
+                aria-label="Face and posture landmark overlay"
+              ></canvas>
+              <div id="vw-empty">
+                <svg viewBox="0 0 80 64" fill="none" aria-hidden="true">
+                  <rect
+                    x="7"
+                    y="12"
+                    width="43"
+                    height="40"
+                    rx="8"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                  <path
+                    d="M50 26 72 16v32L50 38"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="28"
+                    cy="32"
+                    r="7"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+                <h3>Your video starts here</h3>
+                <p>
+                  Enable your camera or choose a recording.<br />Nothing is sent
+                  to a server.
+                </p>
+              </div>
+            </div>
+            <div class="vw-overlay-toolbar">
+              <label class="vw-check"
+                ><input id="vw-show-overlay" type="checkbox" checked /> Show
+                MediaPipe overlay</label
+              >
+              <details class="vw-overlay-options">
+                <summary>Overlay options</summary>
+                <div class="vw-playback">
+                  <label class="vw-check"
+                    ><input id="vw-show-mesh" type="checkbox" checked /> Face
+                    mesh</label
+                  >
+                  <label class="vw-check"
+                    ><input id="vw-show-face" type="checkbox" checked /> Face
+                    keypoints</label
+                  ><label class="vw-check"
+                    ><input id="vw-show-pose" type="checkbox" checked /> Posture
+                    keypoints</label
+                  ><label class="vw-check"
+                    ><input id="vw-follow" type="checkbox" /> Isolate selected
+                    person</label
+                  >
+                </div>
+              </details>
+            </div>
+            <p
+              id="vw-live-status"
+              class="vw-small vw-live-status"
+              aria-live="off"
+            >
+              Enable the camera to start continuous estimation. Visibility does
+              not affect data capture.
+            </p>
+            <div
+              id="vw-status"
+              class="vw-status"
+              role="status"
+              aria-live="polite"
+            >
+              Ready to collect a video.
+            </div>
+            <progress
+              id="vw-progress"
+              value="0"
+              max="1"
+              aria-label="Analysis progress"
+              hidden
+            ></progress>
+          </section>
+          <div
+            class="vw-review"
+            tabindex="0"
+            role="region"
+            aria-label="Scrollable video analysis"
+          >
+            <section class="vw-panel vw-signals">
+              <div class="vw-panel-top">
+                <h2>Aligned signals</h2>
+                <span id="vw-clock" class="vw-small">0.00 s</span>
+              </div>
+
+              <div class="vw-review-controls">
+                <label class="vw-field"
+                  >Track<select id="vw-track" disabled>
+                    <option value="">Analyze video to find people</option>
+                  </select></label
+                >
+
+                <label class="vw-field"
+                  >Time window<select id="vw-zoom" disabled>
+                    <option value="0">Full clip</option>
+                    <option value="1">1 second</option>
+                    <option value="5">5 seconds</option>
+                    <option value="10">10 seconds</option>
+                    <option value="30">30 seconds</option>
+                  </select></label
+                >
+                <label class="vw-check"
+                  ><input type="checkbox" id="vw-follow-playback" checked />
+                  Follow playback</label
+                >
+              </div>
+              <label class="vw-range-label" for="vw-seek"
+                >Playback
+                <output id="vw-playback-time" aria-live="off"
+                  >0.00 / 0.00 s</output
+                ></label
+              >
+              <input
+                id="vw-seek"
+                type="range"
+                min="0"
+                max="0"
+                step="0.01"
+                value="0"
+                disabled
+              />
+              <label class="vw-range-label" for="vw-pan"
+                >Visible interval
+                <output id="vw-window-label" aria-live="off"
+                  >Full clip</output
+                ></label
+              >
+              <input
+                id="vw-pan"
+                type="range"
+                min="0"
+                max="0"
+                step="0.01"
+                value="0"
+                disabled
+              />
+              <p class="vw-small vw-timeline-help">
+                Click a signal or sample time to seek. Scroll horizontally or
+                Shift-scroll over a signal to pan.
+              </p>
+              <label class="vw-field vw-signal-select"
+                >Movement signal<select id="vw-signal">
+                  <option value="lipAperture">Lip aperture</option>
+                  <option value="mouthWidth">Mouth width</option>
+                  <option value="lowerLipY">
+                    Lower lip · local vertical position
+                  </option>
+                  <option value="jawY">Jaw · local vertical position</option>
+                  <option value="jawOpen">Jaw opening coefficient</option>
+                  <option value="smileAsymmetry">Smile asymmetry</option>
+                  <option value="headRoll">Head roll</option>
+                  <option value="shoulderTilt">Shoulder tilt</option>
+                  <option value="torsoLean">Torso lean</option>
+                </select></label
+              >
+              <div class="vw-chart" id="vw-motion-chart">
+                <canvas
+                  id="vw-motion"
+                  width="900"
+                  height="170"
+                  aria-label="Movement over time"
+                ></canvas>
+                <div class="vw-cursor"></div>
+              </div>
+              <div class="vw-axis">
+                <span id="vw-motion-unit">Outer-eye distance units</span
+                ><span>Time (seconds) →</span>
+              </div>
+              <h3 class="vw-subheading">Audio waveform</h3>
+              <div class="vw-chart">
+                <canvas
+                  id="vw-wave"
+                  width="900"
+                  height="95"
+                  aria-label="Audio waveform"
+                ></canvas>
+                <div class="vw-cursor"></div>
+              </div>
+              <div class="vw-axis">
+                <span>Amplitude · −1 to 1</span><span>Time (seconds) →</span>
+              </div>
+              <h3 class="vw-subheading">Acoustic spectrogram</h3>
+              <div class="vw-chart">
+                <canvas
+                  id="vw-spec"
+                  width="900"
+                  height="160"
+                  aria-label="Audio spectrogram"
+                ></canvas>
+                <div class="vw-cursor"></div>
+              </div>
+              <div class="vw-axis">
+                <span id="vw-frequency"
+                  >Frequency · 0–8 kHz (bottom to top)</span
+                ><span>Dark → bright · −80 to 0 dBFS</span>
+              </div>
+              <p id="vw-audio-status" class="vw-small">
+                An audio track, when decodable, appears here after opening or
+                recording a video. Click a signal to seek.
+              </p>
+            </section>
+            <section class="vw-panel">
+              <div class="vw-section-heading">
+                <h2>Person summary · full interval</h2>
+              </div>
+              <p id="vw-track-info" class="vw-small">
+                Tracks follow motion within this clip. IDs may change at
+                occlusions or crossings; they do not identify a person across
+                recordings.
+              </p>
+              <div id="vw-metrics" class="vw-metrics">
+                <p class="vw-small">
+                  Movement and coordination summaries will appear here.
+                </p>
+              </div>
+              <h3 class="vw-subheading">
+                Expression channels <span>at playback time</span>
+              </h3>
+              <div id="vw-expressions" class="vw-expressions">
+                <p class="vw-small">
+                  Jaw, smile, blink, and brow model coefficients.
+                </p>
+              </div>
+            </section>
+            <section class="vw-panel vw-samples">
+              <div class="vw-panel-top">
+                <h2>Sampled measurements</h2>
+                <span id="vw-sample-count" class="vw-small">No samples</span>
+              </div>
+              <p class="vw-small">
+                Selected person · click a time to inspect its video frame.
+                Values use the movement signal’s units above; jaw opening is a
+                model coefficient.
+              </p>
+              <div
+                id="vw-sample-scroll"
+                class="vw-sample-scroll"
+                tabindex="0"
+                role="region"
+                aria-label="Scrollable sampled measurements"
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Time (s)</th>
+                      <th id="vw-sample-signal">Lip aperture</th>
+                      <th>Jaw open</th>
+                      <th>Head roll (°)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="vw-sample-rows"></tbody>
+                </table>
+                <p id="vw-sample-empty" class="vw-small">
+                  Record with estimation or analyze a video to inspect samples.
+                </p>
+              </div>
+            </section>
+          </div>
+        </div>
+        <section class="vw-panel vw-export">
+          <div>
+            <h2>Take your work with you</h2>
+            <p class="vw-small">
+              JSON includes captured timestamps, latency, raw landmarks, all
+              blendshapes, tracks, processing settings and summaries. CSV
+              contains one row per person per sampled time. Missing values stay
+              empty.
+            </p>
+          </div>
+          <div class="vw-buttons">
+            <button id="vw-download" class="vw-button" disabled>
+              Download video
+            </button>
+            <button id="vw-download-overlay" class="vw-button" disabled>
+              Download overlay video
+            </button>
+            <button id="vw-reset" class="vw-button">Clear session</button>
+            <button id="vw-json" class="vw-button" disabled>
+              Download JSON</button
+            ><button id="vw-csv" class="vw-button" disabled>
+              Download CSV
+            </button>
+          </div>
+        </section>
+        <details class="vw-panel vw-methods">
+          <summary>Methods, interpretation &amp; research notes</summary>
+          <div class="vw-method-grid">
+            <div>
+              <h3>What the measurements mean</h3>
+              <p>
+                Continuous camera estimation captures completed results while
+                recording. The overlay checkbox changes display only. Live
+                inference skips frames when busy; exported timestamps, achieved
+                rate and latency describe what was captured. Keep this tab
+                visible. The optional overlay video uses the latest estimate and
+                hides it after 0.5 seconds without a fresh result.
+              </p>
+              <p>
+                Lip aperture (landmarks 13–14) and width (61–291) are pixel
+                distances divided by outer-eye distance (33–263). Lower lip (14)
+                and jaw (152) positions use an eye-centered, roll-corrected 2D
+                frame. Image width and height are accounted for. Optional
+                outer-eye calibration provides approximate image-plane
+                millimeters. Raw depth remains model-relative.
+              </p>
+              <p>
+                Range is max minus min. Speed uses absolute first differences in
+                seconds and excludes detection gaps. No temporal filter is
+                applied; noise affects speed. Coordination is zero-lag Pearson
+                correlation with at least three valid pairs, and is unavailable
+                for constant signals. Correlation with audio uses the entire
+                mixed audio track and does not identify the speaker.
+              </p>
+              <p>
+                Shoulder tilt and torso lean are image-plane angles using joints
+                with visibility ≥ 0.6. Expression coefficients (0–1) describe
+                modeled facial motion; they are not emotion diagnoses or
+                calibrated FACS action units. Asymmetry is the absolute
+                left–right difference.
+              </p>
+            </div>
+            <div>
+              <h3>Research context</h3>
+              <p>
+                Sanchez et al.,
+                <em
+                  >From Lab to Laptop: Validating 3D Speech Kinematics with
+                  MediaPipe Face Mesh</em
+                >
+                (Interspeech 2026, supplied manuscript), motivated the speech
+                measurements. Its validation used participant calibration, rigid
+                3D head correction, matched filtering, and optical motion
+                capture in four adults. This workbench uses a simpler
+                exploratory 2D method and does not inherit the study’s
+                millimeter-scale accuracy claims.
+              </p>
+              <p>
+                <a href="https://doi.org/10.1145/3733155.3733207"
+                  >Schulze et al. (2025)</a
+                >
+                study landmark selection for speech exercises.
+                <a href="https://arxiv.org/abs/2507.12001">Li et al. (2025)</a>
+                investigate learned AU–blendshape representations.
+              </p>
+              <p>
+                Built with
+                <a
+                  href="https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker/web_js"
+                  >MediaPipe Face Landmarker</a
+                >
+                and
+                <a
+                  href="https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/web_js"
+                  >Pose Landmarker</a
+                >, runtime 0.10.32, float16 model revision 1. Model/WASM files
+                load from Google Storage and jsDelivr when analysis starts. Once
+                cached by your browser they may be reused; first use requires
+                internet access.
+              </p>
+              <p>
+                Sequential sampling may be below the source frame rate. Tracks
+                use geometric proximity and velocity, with a new segment after
+                ambiguity or an absence over 0.8 s. Lighting, occlusion,
+                perspective and crossings affect estimates. Review the overlays
+                before interpreting results.
+              </p>
+            </div>
+          </div>
+        </details>
+      </div>
+    </main>
+    <script type="module">
+      import { initVideoWorkbench } from "./workbench.js";
+      initVideoWorkbench();
+    </script>
+  </body>
+</html>
