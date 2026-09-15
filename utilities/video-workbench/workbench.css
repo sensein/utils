@@ -595,10 +595,8 @@ main {
 }
 .vw-review {
   min-width: 0;
-  max-height: clamp(520px, calc(100dvh - 285px), 900px);
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  overscroll-behavior-y: contain;
+  align-self: stretch;
+  align-content: start;
   display: grid;
   gap: 0.65rem;
   border-radius: 9px;
@@ -789,11 +787,6 @@ main {
   .vw-preview .vw-status {
     font-size: 0.7rem;
     line-height: 1.3;
-  }
-  .vw-review {
-    max-height: none;
-    overflow: visible;
-    display: grid;
   }
   .vw-expressions {
     grid-template-columns: 1fr 1fr;

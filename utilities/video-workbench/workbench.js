@@ -10,7 +10,7 @@ import {
   summarize,
   toCSV,
 } from "./metrics.mjs";
-export const BUILD_VERSION = "26.09.15-signals.2";
+export const BUILD_VERSION = "26.09.15-signals.3";
 const MAX_BYTES = 250 * 1024 * 1024,
   MAX_SECONDS = 300,
   MAX_FRAMES = 4500;
