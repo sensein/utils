@@ -18,9 +18,19 @@
           <div>
             <p class="vw-eyebrow">
               Capture · follow · measure
-              <span class="vw-version">26.09.15-review.1</span>
+              <span class="vw-version">26.09.15-signals.2</span>
             </p>
-            <h1>Video workbench</h1>
+            <div class="vw-title-row">
+              <h1>Video workbench</h1>
+              <button
+                id="vw-about-open"
+                class="vw-button vw-about-button"
+                aria-haspopup="dialog"
+                aria-controls="vw-about"
+              >
+                About <span aria-hidden="true">?</span>
+              </button>
+            </div>
             <p class="vw-lede">
               A closer look at movement, expression, and speech.
             </p>
@@ -154,102 +164,129 @@
           </details>
         </section>
         <div class="vw-workspace">
-          <section class="vw-panel vw-preview">
-            <div class="vw-panel-top">
-              <h2>Video &amp; tracks</h2>
-              <span id="vw-source" class="vw-small">No video loaded</span>
-            </div>
-            <div class="vw-stage">
-              <video
-                id="vw-video"
-                playsinline
-                controls
-                aria-label="Video playback"
-              ></video>
-              <canvas
-                id="vw-overlay"
-                aria-label="Face and posture landmark overlay"
-              ></canvas>
-              <div id="vw-empty">
-                <svg viewBox="0 0 80 64" fill="none" aria-hidden="true">
-                  <rect
-                    x="7"
-                    y="12"
-                    width="43"
-                    height="40"
-                    rx="8"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  />
-                  <path
-                    d="M50 26 72 16v32L50 38"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  />
-                  <circle
-                    cx="28"
-                    cy="32"
-                    r="7"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  />
-                </svg>
-                <h3>Your video starts here</h3>
-                <p>
-                  Enable your camera or choose a recording.<br />Nothing is sent
-                  to a server.
+          <div class="vw-video-column">
+            <section class="vw-panel vw-preview">
+              <div class="vw-panel-top">
+                <h2>Video &amp; tracks</h2>
+                <span id="vw-source" class="vw-small">No video loaded</span>
+              </div>
+              <div class="vw-stage">
+                <video
+                  id="vw-video"
+                  playsinline
+                  controls
+                  aria-label="Video playback"
+                ></video>
+                <canvas
+                  id="vw-overlay"
+                  aria-label="Face and posture landmark overlay"
+                ></canvas>
+                <div id="vw-empty">
+                  <svg viewBox="0 0 80 64" fill="none" aria-hidden="true">
+                    <rect
+                      x="7"
+                      y="12"
+                      width="43"
+                      height="40"
+                      rx="8"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    />
+                    <path
+                      d="M50 26 72 16v32L50 38"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    />
+                    <circle
+                      cx="28"
+                      cy="32"
+                      r="7"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    />
+                  </svg>
+                  <h3>Your video starts here</h3>
+                  <p>
+                    Enable your camera or choose a recording.<br />Nothing is
+                    sent to a server.
+                  </p>
+                </div>
+              </div>
+              <div class="vw-overlay-toolbar">
+                <label class="vw-check"
+                  ><input id="vw-show-overlay" type="checkbox" checked /> Show
+                  MediaPipe overlay</label
+                >
+                <details class="vw-overlay-options">
+                  <summary>Overlay options</summary>
+                  <div class="vw-playback">
+                    <label class="vw-check"
+                      ><input id="vw-show-mesh" type="checkbox" checked /> Face
+                      mesh</label
+                    >
+                    <label class="vw-check"
+                      ><input id="vw-show-face" type="checkbox" checked /> Face
+                      keypoints</label
+                    ><label class="vw-check"
+                      ><input id="vw-show-pose" type="checkbox" checked />
+                      Posture keypoints</label
+                    ><label class="vw-check"
+                      ><input id="vw-follow" type="checkbox" /> Isolate selected
+                      person</label
+                    >
+                  </div>
+                </details>
+              </div>
+              <p
+                id="vw-live-status"
+                class="vw-small vw-live-status"
+                aria-live="off"
+              >
+                Enable the camera to start continuous estimation. Visibility
+                does not affect data capture.
+              </p>
+              <div
+                id="vw-status"
+                class="vw-status"
+                role="status"
+                aria-live="polite"
+              >
+                Ready to collect a video.
+              </div>
+              <progress
+                id="vw-progress"
+                value="0"
+                max="1"
+                aria-label="Analysis progress"
+                hidden
+              ></progress>
+            </section>
+            <section class="vw-panel vw-export">
+              <div>
+                <h2>Take your work with you</h2>
+                <p class="vw-small">
+                  JSON includes captured timestamps, latency, raw landmarks, all
+                  blendshapes, tracks, processing settings and summaries. CSV
+                  contains one row per person per sampled time. Missing values
+                  stay empty.
                 </p>
               </div>
-            </div>
-            <div class="vw-overlay-toolbar">
-              <label class="vw-check"
-                ><input id="vw-show-overlay" type="checkbox" checked /> Show
-                MediaPipe overlay</label
-              >
-              <details class="vw-overlay-options">
-                <summary>Overlay options</summary>
-                <div class="vw-playback">
-                  <label class="vw-check"
-                    ><input id="vw-show-mesh" type="checkbox" checked /> Face
-                    mesh</label
-                  >
-                  <label class="vw-check"
-                    ><input id="vw-show-face" type="checkbox" checked /> Face
-                    keypoints</label
-                  ><label class="vw-check"
-                    ><input id="vw-show-pose" type="checkbox" checked /> Posture
-                    keypoints</label
-                  ><label class="vw-check"
-                    ><input id="vw-follow" type="checkbox" /> Isolate selected
-                    person</label
-                  >
-                </div>
-              </details>
-            </div>
-            <p
-              id="vw-live-status"
-              class="vw-small vw-live-status"
-              aria-live="off"
-            >
-              Enable the camera to start continuous estimation. Visibility does
-              not affect data capture.
-            </p>
-            <div
-              id="vw-status"
-              class="vw-status"
-              role="status"
-              aria-live="polite"
-            >
-              Ready to collect a video.
-            </div>
-            <progress
-              id="vw-progress"
-              value="0"
-              max="1"
-              aria-label="Analysis progress"
-              hidden
-            ></progress>
-          </section>
+              <div class="vw-buttons">
+                <button id="vw-download" class="vw-button" disabled>
+                  Download video
+                </button>
+                <button id="vw-download-overlay" class="vw-button" disabled>
+                  Download overlay video
+                </button>
+                <button id="vw-reset" class="vw-button">Clear session</button>
+                <button id="vw-json" class="vw-button" disabled>
+                  Download JSON</button
+                ><button id="vw-csv" class="vw-button" disabled>
+                  Download CSV
+                </button>
+              </div>
+            </section>
+          </div>
           <div
             class="vw-review"
             tabindex="0"
@@ -332,6 +369,13 @@
                   <option value="torsoLean">Torso lean</option>
                 </select></label
               >
+              <div class="vw-axis">
+                <output id="vw-motion-current" aria-live="off"
+                  >At current frame: —</output
+                ><output id="vw-inspect-time" aria-live="off"
+                  >Hover over a signal to inspect time.</output
+                >
+              </div>
               <div class="vw-chart" id="vw-motion-chart">
                 <canvas
                   id="vw-motion"
@@ -340,11 +384,15 @@
                   aria-label="Movement over time"
                 ></canvas>
                 <div class="vw-cursor"></div>
+                <div class="vw-inspect-cursor" hidden></div>
               </div>
               <div class="vw-axis">
                 <span id="vw-motion-unit">Outer-eye distance units</span
                 ><span>Time (seconds) →</span>
               </div>
+              <p id="vw-motion-status" class="vw-small">
+                Enable the camera or analyze a video to explore movement.
+              </p>
               <h3 class="vw-subheading">Audio waveform</h3>
               <div class="vw-chart">
                 <canvas
@@ -354,9 +402,11 @@
                   aria-label="Audio waveform"
                 ></canvas>
                 <div class="vw-cursor"></div>
+                <div class="vw-inspect-cursor" hidden></div>
               </div>
               <div class="vw-axis">
-                <span>Amplitude · −1 to 1</span><span>Time (seconds) →</span>
+                <span>Peak-normalized amplitude · −1 to 1</span
+                ><span>Time (seconds) →</span>
               </div>
               <h3 class="vw-subheading">Acoustic spectrogram</h3>
               <div class="vw-chart">
@@ -367,6 +417,7 @@
                   aria-label="Audio spectrogram"
                 ></canvas>
                 <div class="vw-cursor"></div>
+                <div class="vw-inspect-cursor" hidden></div>
               </div>
               <div class="vw-axis">
                 <span id="vw-frequency"
@@ -436,33 +487,17 @@
             </section>
           </div>
         </div>
-        <section class="vw-panel vw-export">
-          <div>
-            <h2>Take your work with you</h2>
-            <p class="vw-small">
-              JSON includes captured timestamps, latency, raw landmarks, all
-              blendshapes, tracks, processing settings and summaries. CSV
-              contains one row per person per sampled time. Missing values stay
-              empty.
-            </p>
+        <dialog
+          id="vw-about"
+          class="vw-panel vw-about"
+          aria-labelledby="vw-about-title"
+        >
+          <div class="vw-about-heading">
+            <h2 id="vw-about-title">About · methods &amp; research notes</h2>
+            <form method="dialog">
+              <button class="vw-button" autofocus>Close</button>
+            </form>
           </div>
-          <div class="vw-buttons">
-            <button id="vw-download" class="vw-button" disabled>
-              Download video
-            </button>
-            <button id="vw-download-overlay" class="vw-button" disabled>
-              Download overlay video
-            </button>
-            <button id="vw-reset" class="vw-button">Clear session</button>
-            <button id="vw-json" class="vw-button" disabled>
-              Download JSON</button
-            ><button id="vw-csv" class="vw-button" disabled>
-              Download CSV
-            </button>
-          </div>
-        </section>
-        <details class="vw-panel vw-methods">
-          <summary>Methods, interpretation &amp; research notes</summary>
           <div class="vw-method-grid">
             <div>
               <h3>What the measurements mean</h3>
@@ -485,10 +520,13 @@
               <p>
                 Range is max minus min. Speed uses absolute first differences in
                 seconds and excludes detection gaps. No temporal filter is
-                applied; noise affects speed. Coordination is zero-lag Pearson
-                correlation with at least three valid pairs, and is unavailable
-                for constant signals. Correlation with audio uses the entire
-                mixed audio track and does not identify the speaker.
+                applied; noise affects speed. Independent-frame MediaPipe
+                inference avoids its video-mode temporal smoothing. Measurements
+                remain unfiltered; processing latency is reported separately.
+                Coordination is zero-lag Pearson correlation with at least three
+                valid pairs, and is unavailable for constant signals.
+                Correlation with audio uses the entire mixed audio track and
+                does not identify the speaker.
               </p>
               <p>
                 Shoulder tilt and torso lean are image-plane angles using joints
@@ -545,7 +583,7 @@
               </p>
             </div>
           </div>
-        </details>
+        </dialog>
       </div>
     </main>
     <script type="module">

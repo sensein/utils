@@ -338,6 +338,7 @@ fieldset {
   max-width: 340px;
 }
 .vw-chart {
+  isolation: isolate;
   position: relative;
   overflow: hidden;
   background: #111b29;
@@ -377,11 +378,6 @@ fieldset {
 .vw-export p {
   max-width: 720px;
   margin-top: 0.4rem;
-}
-.vw-methods summary {
-  font-size: 0.88rem;
-  font-weight: 500;
-  cursor: pointer;
 }
 .vw-method-grid {
   display: grid;
@@ -557,7 +553,10 @@ main {
   gap: 0.75rem;
   align-items: start;
 }
-.vw-preview {
+.vw-video-column {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
   position: sticky;
   top: 12px;
 }
@@ -702,8 +701,11 @@ main {
   font-weight: 700;
 }
 .vw-export {
-  margin: 0.75rem 0;
-  gap: 1rem;
+  display: block;
+  margin: 0;
+}
+.vw-export .vw-buttons {
+  margin-top: 0.65rem;
 }
 .vw-export > div {
   flex: 1;
@@ -753,7 +755,11 @@ main {
   .vw-workspace {
     grid-template-columns: 1fr;
   }
+  .vw-video-column {
+    display: contents;
+  }
   .vw-preview {
+    position: sticky;
     top: 0;
     z-index: 2;
     padding: 0.5rem;
@@ -803,4 +809,62 @@ main {
   .vw-export .vw-buttons {
     margin-top: 0.6rem;
   }
+}
+
+.vw-cursor {
+  border-left: 2px solid #fff;
+  box-shadow: -1px 0 #111b29;
+  z-index: 1;
+}
+.vw-inspect-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  border-left: 2px dashed #ffcb77;
+  box-shadow: -1px 0 #111b29;
+  z-index: 2;
+}
+#vw-motion-status {
+  margin-top: 0.4rem;
+}
+#vw-motion-chart {
+  margin-top: 0.4rem;
+}
+
+.vw-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.vw-about-button {
+  border-radius: 20px;
+  padding: 0.35rem 0.6rem;
+}
+.vw-about-button span {
+  margin-left: 0.35rem;
+  font-weight: 700;
+}
+.vw-about {
+  color: var(--color-ink);
+  width: min(900px, calc(100% - 32px));
+  max-height: 85dvh;
+  padding: 1.2rem;
+  overflow-y: auto;
+}
+.vw-about::backdrop {
+  background: #111b2999;
+}
+.vw-about-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.vw-about-heading form {
+  margin: 0;
+}
+body:has(#vw-about[open]) {
+  overflow: hidden;
 }
