@@ -46,3 +46,4 @@ uv run pytest
 ## Current utilities
 
 - `streaming-audio-workbench`: a single-file microphone analysis page for waveform, spectrogram, spectrum, MFCC, and CPP exploration.
+- `video-workbench`: camera recording and local video analysis with face/posture tracking, expression and coordination measures, acoustic displays, and JSON/CSV export.
