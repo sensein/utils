@@ -48,6 +48,10 @@ export function poseMetrics(points, width, height) {
     points[i] &&
     valid(points[i].x) &&
     valid(points[i].y) &&
+    points[i].x >= 0 &&
+    points[i].x <= 1 &&
+    points[i].y >= 0 &&
+    points[i].y <= 1 &&
     (points[i].visibility ?? 0) >= 0.6;
   const p = (i) => ({ x: points[i].x * width, y: points[i].y * height });
   let shoulderTilt = null,

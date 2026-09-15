@@ -13,9 +13,12 @@ self.onmessage = async ({ data }) => {
       pose = undefined;
       const files = await FilesetResolver.forVisionTasks(MODEL_INFO.wasm);
       // CPU supports classic workers without relying on an OffscreenCanvas WebGL context.
+      // VIDEO mode adds internal causal smoothing for single-person landmarks.
+      // Independent IMAGE estimates preserve raw sample timing; our caller still
+      // schedules continuously and associates identities across frames.
       face = await FaceLandmarker.createFromOptions(files, {
         baseOptions: { modelAssetPath: MODEL_INFO.face, delegate: "CPU" },
-        runningMode: "VIDEO",
+        runningMode: "IMAGE",
         numFaces: data.people,
         outputFaceBlendshapes: true,
         outputFacialTransformationMatrixes: true,
@@ -26,7 +29,7 @@ self.onmessage = async ({ data }) => {
       if (data.pose)
         pose = await PoseLandmarker.createFromOptions(files, {
           baseOptions: { modelAssetPath: MODEL_INFO.pose, delegate: "CPU" },
-          runningMode: "VIDEO",
+          runningMode: "IMAGE",
           numPoses: data.people,
           minPoseDetectionConfidence: 0.5,
           minPosePresenceConfidence: 0.5,
@@ -39,8 +42,8 @@ self.onmessage = async ({ data }) => {
       });
     } else if (data.type === "frame") {
       try {
-        const faces = face.detectForVideo(data.bitmap, data.timestamp);
-        const poses = pose?.detectForVideo(data.bitmap, data.timestamp);
+        const faces = face.detect(data.bitmap);
+        const poses = pose?.detect(data.bitmap);
         self.postMessage({ id: data.id, faces, poses });
       } finally {
         data.bitmap.close();

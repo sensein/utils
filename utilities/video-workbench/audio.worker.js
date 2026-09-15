@@ -1,36 +1,16 @@
+import { waveformSummary, centeredWindow } from "./audio.mjs";
 import { spectrum } from "./metrics.mjs";
 self.onmessage = ({ data }) => {
   try {
     const samples = data.samples,
       rate = data.rate;
-    const columns = 900,
-      bins = 128,
-      fft = 1024;
-    const wave = [],
-      rms = [],
+    const { wave, rms, peak, columns } = waveformSummary(samples);
+    const bins = 128,
+      fft = 1024,
       db = [];
     for (let c = 0; c < columns; c++) {
-      const start = Math.floor((c * samples.length) / columns),
-        end = Math.max(
-          start + 1,
-          Math.floor(((c + 1) * samples.length) / columns),
-        );
-      let lo = 0,
-        hi = 0,
-        sum = 0;
-      for (let i = start; i < Math.min(end, samples.length); i++) {
-        const v = samples[i];
-        lo = Math.min(lo, v);
-        hi = Math.max(hi, v);
-        sum += v * v;
-      }
-      wave.push([lo, hi]);
-      rms.push(Math.sqrt(sum / (end - start)));
-      const window = new Float32Array(fft);
-      const offset = Math.max(0, Math.round((start + end) / 2) - fft / 2);
-      window.set(
-        samples.subarray(offset, Math.min(samples.length, offset + fft)),
-      );
+      const center = ((c + 0.5) * samples.length) / columns;
+      const window = centeredWindow(samples, center, fft);
       const spec = spectrum(window),
         maxHz = Math.min(8000, rate / 2);
       db.push(
@@ -53,7 +33,14 @@ self.onmessage = ({ data }) => {
       maxHz: Math.min(8000, rate / 2),
       fftSize: fft,
       columns,
-      note: "Display STFT uses 900 uniformly spaced Hann windows; waveform and RMS aggregate all samples.",
+      waveformNormalization: {
+        method: "full_clip_mono_peak",
+        peak,
+        displayOnly: true,
+      },
+      temporalFilter: "none",
+      stftAlignment: "column_center; zero_padded_at_boundaries",
+      note: "Display STFT uses up to 900 centered Hann windows; waveform is normalized to the full clip mono peak. RMS and dBFS retain original amplitudes. No temporal smoothing.",
     });
   } catch (error) {
     self.postMessage({ error: String(error) });

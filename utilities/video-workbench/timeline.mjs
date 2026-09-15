@@ -12,3 +12,14 @@ export function followWindow(view, time, duration) {
   if (time >= view.start && time <= view.end) return view;
   return timeWindow(duration, view.span, time - view.span * 0.2);
 }
+
+/** Give flat/isolated observations visible space without changing their values. */
+export function signalRange(values) {
+  const finite = values.filter(
+    (v) => typeof v === "number" && Number.isFinite(v),
+  );
+  if (!finite.length) return null;
+  const lo = Math.min(...finite),
+    hi = Math.max(...finite);
+  return lo === hi ? { lo: lo - 0.5, hi: hi + 0.5 } : { lo, hi };
+}

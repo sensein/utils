@@ -1,4 +1,4 @@
-import { timeWindow, timeAt, followWindow } from "./timeline.mjs";
+import { timeWindow, timeAt, followWindow, signalRange } from "./timeline.mjs";
 import { LiveClock, nearestFrame } from "./live.mjs";
 import { OverlayRecording } from "./overlay-recording.js";
 import { MODEL_INFO } from "./models.js";
@@ -10,7 +10,7 @@ import {
   summarize,
   toCSV,
 } from "./metrics.mjs";
-export const BUILD_VERSION = "26.09.15-review.1";
+export const BUILD_VERSION = "26.09.15-signals.1";
 const MAX_BYTES = 250 * 1024 * 1024,
   MAX_SECONDS = 300,
   MAX_FRAMES = 4500;
@@ -50,12 +50,18 @@ export function initVideoWorkbench() {
   let annotated = null,
     overlayBlob = null,
     overlayError = null;
-  let viewStart = 0;
+  let viewStart = 0,
+    hoverFraction = null;
   let sampleRows = [],
     sampleElements = [],
     activeSample = null;
-  const view = () =>
-    timeWindow(duration, Number(select("zoom").value), viewStart);
+  const view = () => {
+    if (["camera", "recording"].includes(mode)) {
+      const end = Math.max(10, live?.latest?.time ?? 0);
+      return timeWindow(end, 10, end - 10);
+    }
+    return timeWindow(duration, Number(select("zoom").value), viewStart);
+  };
   const pending = new Map();
   function status(message, error = false) {
     el("status").textContent = message;
@@ -174,6 +180,7 @@ export function initVideoWorkbench() {
     media = null;
     duration = 0;
     viewStart = 0;
+    hoverFraction = null;
     select("zoom").value = "0";
     input("follow-playback").checked = true;
     audio = null;
@@ -350,7 +357,7 @@ export function initVideoWorkbench() {
       drawAudio();
       updateSummary();
       el("audio-status").textContent =
-        `Mono audio · ${rate.toLocaleString()} Hz · ${result.fftSize}-sample Hann windows. Waveform and spectrogram share the video timeline. Silence appears flat. ${Math.abs(result.duration - duration) > 0.2 ? "Audio and video durations differ; review synchronization." : ""}`;
+        `Mono audio · ${rate.toLocaleString()} Hz · ${result.fftSize}-sample Hann windows. Waveform normalized to the clip peak; RMS and spectrogram retain original amplitudes. Silence appears flat. ${Math.abs(result.duration - duration) > 0.2 ? "Audio and video durations differ; review synchronization." : ""}`;
     } catch {
       if (generation === sourceGeneration) {
         audio = null;
@@ -411,6 +418,7 @@ export function initVideoWorkbench() {
       poseTracker: new TrackManager(),
       ready: false,
       latest: null,
+      history: [],
       completed: 0,
       began: performance.now(),
       usesVideoCallback: typeof video.requestVideoFrameCallback === "function",
@@ -455,7 +463,7 @@ export function initVideoWorkbench() {
           );
           if (live !== current) return;
           const frame = {
-            time: 0,
+            time: (now - current.began) / 1000,
             captureClockMs: now,
             sourceMediaTime: mediaTime,
             inferenceLatencyMs: performance.now() - now,
@@ -477,6 +485,12 @@ export function initVideoWorkbench() {
             run.skippedCameraFrames = current.clock.skipped;
             if (frames.length * people >= MAX_FRAMES)
               finishRecording("sample_limit");
+          }
+          if (mode === "camera" || (mode === "recording" && time !== null)) {
+            current.history.push(frame);
+            current.history = current.history
+              .filter((f) => f.time >= frame.time - 10)
+              .slice(-300);
           }
           const ids = [
             ...new Set([
@@ -505,6 +519,7 @@ export function initVideoWorkbench() {
           }
           el("live-status").textContent =
             `Live estimates: ${current.completed} · ${(current.completed / Math.max(0.001, (performance.now() - current.began) / 1000)).toFixed(1)} /s achieved · ${frame.inferenceLatencyMs.toFixed(0)} ms latency · ${mode === "recording" ? frames.length + " samples captured" : "preview only"}. Overlay visibility does not affect capture.`;
+          drawMotion();
           drawOverlay();
         } catch (error) {
           if (live !== current) return;
@@ -726,6 +741,7 @@ export function initVideoWorkbench() {
       if (live?.ready) {
         const settings = live.settings;
         live.clock.startRecording(recordStart);
+        live.history = [];
         run = {
           ...settings,
           mode: "live",
@@ -1108,7 +1124,7 @@ export function initVideoWorkbench() {
   select("signal").onchange = () => {
     drawMotion();
     renderSamples();
-    syncTimeline();
+    drawOverlay();
   };
   for (const key of [
     "show-overlay",
@@ -1224,6 +1240,8 @@ export function initVideoWorkbench() {
       selected = select("track").value;
     paintPeople(ctx, width, height, frame, selected);
     const person = frame?.people.find((p) => p.id === selected);
+    const metric = person?.metrics?.[select("signal").value];
+    el("motion-current").textContent = `At current frame: ${format(metric)}`;
     const expressions = el("expressions");
     expressions.replaceChildren();
     for (const [label, key] of [
@@ -1287,8 +1305,9 @@ export function initVideoWorkbench() {
       `${time.toFixed(2)} / ${duration.toFixed(2)} s`;
     document.querySelectorAll(".vw-cursor").forEach((cursor) => {
       cursor.hidden = mode !== "clip" || time < w.start || time > w.end;
-      cursor.style.left = `${w.span ? ((time - w.start) / w.span) * 100 : 0}%`;
+      cursor.style.left = `clamp(0px, ${w.span ? ((time - w.start) / w.span) * 100 : 0}%, calc(100% - 2px))`;
     });
+    drawInspectionCursor();
     const frame = mode === "clip" ? currentFrame() : null;
     const row = frame ? nearestFrame(sampleRows, frame.time, 0.000001) : null;
     const next = row ? sampleElements[sampleRows.indexOf(row)] : null;
@@ -1307,6 +1326,17 @@ export function initVideoWorkbench() {
           scroller.scrollTop = Math.max(0, top - scroller.clientHeight / 2);
       }
     }
+  }
+  function drawInspectionCursor() {
+    const visible = hoverFraction !== null && mode === "clip" && duration > 0;
+    document.querySelectorAll(".vw-inspect-cursor").forEach((cursor) => {
+      cursor.hidden = !visible;
+      if (visible)
+        cursor.style.left = `clamp(0px, ${hoverFraction * 100}%, calc(100% - 2px))`;
+    });
+    el("inspect-time").textContent = visible
+      ? `Cursor: ${timeAt(view(), hoverFraction).toFixed(3)} s`
+      : "Hover over a signal to inspect time.";
   }
   function renderSamples() {
     sampleRows = rowsFor(select("track").value);
@@ -1386,8 +1416,13 @@ export function initVideoWorkbench() {
   function drawMotion() {
     const { c, ctx } = canvas("motion");
     axes(ctx, c.width, c.height);
-    const rows = rowsFor(select("track").value),
-      key = select("signal").value;
+    const rows = ["camera", "recording"].includes(mode)
+      ? (live?.history ?? []).flatMap((f) => {
+          const person = f.people.find((p) => p.id === select("track").value);
+          return person ? [{ time: f.time, ...person }] : [];
+        })
+      : rowsFor(select("track").value);
+    const key = select("signal").value;
     const values = rows.map((r) => r.metrics?.[key]).filter(finite);
     const coefficient = ["jawOpen", "smileAsymmetry"].includes(key),
       angle = ["headRoll", "shoulderTilt", "torsoLean"].includes(key);
@@ -1395,17 +1430,44 @@ export function initVideoWorkbench() {
       ? "Model coefficient · 0–1"
       : angle
         ? "Image-plane degrees"
-        : run?.eyeDistance
+        : (live?.settings.eyeDistance ?? run?.eyeDistance)
           ? "Approximate image-plane mm"
           : "Outer-eye distance units";
-    if (!values.length) {
+    const postureSignal = ["shoulderTilt", "torsoLean"].includes(key);
+    let note = values.length
+      ? `${values.length}/${rows.length} valid samples${live ? " · last 10 seconds" : ""}. Gaps are not interpolated.`
+      : "No valid estimates for this signal.";
+    if (postureSignal) {
+      const enabled = live?.settings.posture ?? run?.posture;
+      if (enabled === false)
+        note =
+          "Posture estimation was off. Enable Estimate posture in settings and analyze again.";
+      else if (rows.length && !rows.some((row) => row.pose))
+        note =
+          "No pose is associated with this track. Choose a posture track if available, or bring your body into view.";
+      else if (values.length < rows.length || !values.length)
+        note +=
+          key === "torsoLean"
+            ? " Torso lean needs both shoulders and hips in frame with visibility ≥ 0.6. Move the camera back to include your hips."
+            : " Shoulder tilt needs both shoulders in frame with visibility ≥ 0.6.";
+    }
+    if (!rows.length && !live && !run)
+      note = "Enable the camera or analyze a video to explore movement.";
+    el("motion-status").textContent = note;
+    const limits = signalRange(values);
+    if (!limits) {
       ctx.fillStyle = "#9dafc2";
-      ctx.fillText("Analyze a clip to explore movement.", 20, 70);
+      ctx.fillText(
+        postureSignal
+          ? "Posture unavailable · see guidance below."
+          : "No valid estimates yet.",
+        10,
+        70,
+      );
       return;
     }
-    const lo = Math.min(...values),
-      hi = Math.max(...values),
-      range = hi - lo || 1;
+    const { lo, hi } = limits,
+      range = hi - lo;
     ctx.strokeStyle = "#58d5c6";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1418,12 +1480,27 @@ export function initVideoWorkbench() {
       }
       const x = ((row.time - view().start) / (view().span || 1)) * c.width,
         y = 15 + (1 - (v - lo) / range) * (c.height - 45);
-      if (previous === null || row.time - previous > 1.6 / (run?.fps ?? 15))
+      if (
+        previous === null ||
+        row.time - previous > 1.6 / (live?.settings.fps ?? run?.fps ?? 15)
+      )
         ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
       previous = row.time;
     }
     ctx.stroke();
+    // A single valid point between detection gaps must remain visible.
+    ctx.fillStyle = "#58d5c6";
+    for (const row of rows) {
+      const value = row.metrics?.[key];
+      if (!finite(value) || row.time < view().start || row.time > view().end)
+        continue;
+      const x = ((row.time - view().start) / (view().span || 1)) * c.width;
+      const y = 15 + (1 - (value - lo) / range) * (c.height - 45);
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, 2 * Math.PI);
+      ctx.fill();
+    }
     ctx.fillStyle = "#c5d7e6";
     ctx.fillText(`${format(lo)} – ${format(hi)}`, 10, 14);
   }
@@ -1438,6 +1515,11 @@ export function initVideoWorkbench() {
       }
       return;
     }
+    wave.ctx.strokeStyle = "#ffffff30";
+    wave.ctx.beginPath();
+    wave.ctx.moveTo(0, (wave.c.height - 20) / 2);
+    wave.ctx.lineTo(wave.c.width, (wave.c.height - 20) / 2);
+    wave.ctx.stroke();
     wave.ctx.strokeStyle = "#83b8fa";
     wave.ctx.beginPath();
     audio.wave.forEach(([lo, hi], i) => {
@@ -1474,6 +1556,19 @@ export function initVideoWorkbench() {
       `Frequency · 0–${audio.maxHz / 1000} kHz (bottom to top)`;
   }
   for (const id of ["motion", "wave", "spec"]) {
+    el(id).addEventListener("pointermove", (event) => {
+      if (event.pointerType === "touch") return;
+      const rect = el(id).getBoundingClientRect();
+      hoverFraction = Math.max(
+        0,
+        Math.min(1, (event.clientX - rect.left) / rect.width),
+      );
+      drawInspectionCursor();
+    });
+    el(id).addEventListener("pointerleave", () => {
+      hoverFraction = null;
+      drawInspectionCursor();
+    });
     el(id).addEventListener(
       "wheel",
       (event) => {
@@ -1555,6 +1650,8 @@ export function initVideoWorkbench() {
       normalization:
         "2D eye-centered, roll-corrected, divided by outer-eye distance",
       filter: "none",
+      inferenceMode: "IMAGE",
+      modelTemporalSmoothing: false,
       tracking:
         "geometry/velocity; 0.8 s expiry; ambiguous match starts new segment",
       visibilityThreshold: 0.6,

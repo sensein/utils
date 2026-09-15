@@ -338,6 +338,7 @@ fieldset {
   max-width: 340px;
 }
 .vw-chart {
+  isolation: isolate;
   position: relative;
   overflow: hidden;
   background: #111b29;
@@ -803,4 +804,25 @@ main {
   .vw-export .vw-buttons {
     margin-top: 0.6rem;
   }
+}
+
+.vw-cursor {
+  border-left: 2px solid #fff;
+  box-shadow: -1px 0 #111b29;
+  z-index: 1;
+}
+.vw-inspect-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  border-left: 2px dashed #ffcb77;
+  box-shadow: -1px 0 #111b29;
+  z-index: 2;
+}
+#vw-motion-status {
+  margin-top: 0.4rem;
+}
+#vw-motion-chart {
+  margin-top: 0.4rem;
 }

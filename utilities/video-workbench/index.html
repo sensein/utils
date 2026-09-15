@@ -18,7 +18,7 @@
           <div>
             <p class="vw-eyebrow">
               Capture · follow · measure
-              <span class="vw-version">26.09.15-review.1</span>
+              <span class="vw-version">26.09.15-signals.1</span>
             </p>
             <h1>Video workbench</h1>
             <p class="vw-lede">
@@ -332,6 +332,13 @@
                   <option value="torsoLean">Torso lean</option>
                 </select></label
               >
+              <div class="vw-axis">
+                <output id="vw-motion-current" aria-live="off"
+                  >At current frame: —</output
+                ><output id="vw-inspect-time" aria-live="off"
+                  >Hover over a signal to inspect time.</output
+                >
+              </div>
               <div class="vw-chart" id="vw-motion-chart">
                 <canvas
                   id="vw-motion"
@@ -340,11 +347,15 @@
                   aria-label="Movement over time"
                 ></canvas>
                 <div class="vw-cursor"></div>
+                <div class="vw-inspect-cursor" hidden></div>
               </div>
               <div class="vw-axis">
                 <span id="vw-motion-unit">Outer-eye distance units</span
                 ><span>Time (seconds) →</span>
               </div>
+              <p id="vw-motion-status" class="vw-small">
+                Enable the camera or analyze a video to explore movement.
+              </p>
               <h3 class="vw-subheading">Audio waveform</h3>
               <div class="vw-chart">
                 <canvas
@@ -354,9 +365,11 @@
                   aria-label="Audio waveform"
                 ></canvas>
                 <div class="vw-cursor"></div>
+                <div class="vw-inspect-cursor" hidden></div>
               </div>
               <div class="vw-axis">
-                <span>Amplitude · −1 to 1</span><span>Time (seconds) →</span>
+                <span>Peak-normalized amplitude · −1 to 1</span
+                ><span>Time (seconds) →</span>
               </div>
               <h3 class="vw-subheading">Acoustic spectrogram</h3>
               <div class="vw-chart">
@@ -367,6 +380,7 @@
                   aria-label="Audio spectrogram"
                 ></canvas>
                 <div class="vw-cursor"></div>
+                <div class="vw-inspect-cursor" hidden></div>
               </div>
               <div class="vw-axis">
                 <span id="vw-frequency"
@@ -485,10 +499,13 @@
               <p>
                 Range is max minus min. Speed uses absolute first differences in
                 seconds and excludes detection gaps. No temporal filter is
-                applied; noise affects speed. Coordination is zero-lag Pearson
-                correlation with at least three valid pairs, and is unavailable
-                for constant signals. Correlation with audio uses the entire
-                mixed audio track and does not identify the speaker.
+                applied; noise affects speed. Independent-frame MediaPipe
+                inference avoids its video-mode temporal smoothing. Measurements
+                remain unfiltered; processing latency is reported separately.
+                Coordination is zero-lag Pearson correlation with at least three
+                valid pairs, and is unavailable for constant signals.
+                Correlation with audio uses the entire mixed audio track and
+                does not identify the speaker.
               </p>
               <p>
                 Shoulder tilt and torso lean are image-plane angles using joints
