@@ -55,21 +55,39 @@ export function poseMetrics(points, width, height) {
     (points[i].visibility ?? 0) >= 0.6;
   const p = (i) => ({ x: points[i].x * width, y: points[i].y * height });
   let shoulderTilt = null,
-    torsoLean = null;
+    torsoLean = null,
+    torsoLeanEstimated = null,
+    torsoConfidence = null;
+  const available = (i) =>
+    points[i] &&
+    valid(points[i].x) &&
+    valid(points[i].y) &&
+    Math.abs(points[i].x) < 3 &&
+    Math.abs(points[i].y) < 3;
   if ([11, 12].every(visible)) {
     const a = p(11),
       b = p(12);
     if (distance(a, b) > 1e-6)
       shoulderTilt =
         (Math.atan2(a.y - b.y, Math.abs(a.x - b.x)) * 180) / Math.PI;
-    if ([23, 24].every(visible)) {
+    if ([23, 24].every(available)) {
       const h = { x: (p(23).x + p(24).x) / 2, y: (p(23).y + p(24).y) / 2 };
       const s = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      if (distance(h, s) > 1e-6)
-        torsoLean = (Math.atan2(s.x - h.x, h.y - s.y) * 180) / Math.PI;
+      const ratio = distance(h, s) / Math.max(1e-6, distance(a, b));
+      if (ratio > 0.2 && ratio < 8) {
+        torsoLeanEstimated = (Math.atan2(s.x - h.x, h.y - s.y) * 180) / Math.PI;
+        torsoConfidence = Math.max(
+          0,
+          Math.min(
+            1,
+            ...[11, 12, 23, 24].map((i) => points[i].visibility ?? 0),
+          ),
+        );
+        if ([23, 24].every(visible)) torsoLean = torsoLeanEstimated;
+      }
     }
   }
-  return { shoulderTilt, torsoLean };
+  return { shoulderTilt, torsoLean, torsoLeanEstimated, torsoConfidence };
 }
 export function correlation(a, b) {
   const pairs = a.map((v, i) => [v, b[i]]).filter((p) => p.every(valid));

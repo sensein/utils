@@ -1,3 +1,5 @@
+import { Calibration } from "./calibration.js";
+import { encodeBlinks } from "./observations.mjs";
 import { timeWindow, timeAt, followWindow, signalRange } from "./timeline.mjs";
 import { LiveClock, nearestFrame } from "./live.mjs";
 import { OverlayRecording } from "./overlay-recording.js";
@@ -10,7 +12,7 @@ import {
   summarize,
   toCSV,
 } from "./metrics.mjs";
-export const BUILD_VERSION = "26.09.15-signals.3";
+export const BUILD_VERSION = "26.09.15-gaze.1";
 const MAX_BYTES = 250 * 1024 * 1024,
   MAX_SECONDS = 300,
   MAX_FRAMES = 4500;
@@ -75,22 +77,41 @@ export function initVideoWorkbench() {
     return timeWindow(duration, Number(select("zoom").value), viewStart);
   };
   const pending = new Map();
+  let blinkRenderKey = "";
+  const calibration = new Calibration(
+    el,
+    () => ({
+      mode,
+      track: select("track").value,
+      source: sourceGeneration,
+      frames,
+      liveReady: !!live?.ready,
+      video,
+      eyeDistance: live?.settings.eyeDistance ?? run?.eyeDistance ?? null,
+    }),
+    () => {
+      controls();
+      updateSummary();
+      drawOverlay();
+    },
+  );
   function status(message, error = false) {
     el("status").textContent = message;
     el("status").dataset.error = String(error);
   }
   function controls() {
-    const busy = ["loading", "recording", "finishing", "analyzing"].includes(
-      mode,
-    );
+    const busy =
+      ["loading", "recording", "finishing", "analyzing"].includes(mode) ||
+      calibration.busy;
     button("camera").disabled =
       busy || mode === "camera" || !navigator.mediaDevices?.getUserMedia;
     button("record").disabled =
       mode !== "camera" ||
       typeof MediaRecorder === "undefined" ||
-      Boolean(live && !live.ready);
+      Boolean(live && !live.ready) ||
+      calibration.busy;
     button("stop").disabled = mode !== "recording";
-    button("camera-off").disabled = mode !== "camera";
+    button("camera-off").disabled = mode !== "camera" || calibration.busy;
     input("file").disabled = busy;
     input("live").disabled = busy;
     input("save-overlay").disabled =
@@ -104,6 +125,9 @@ export function initVideoWorkbench() {
     button("analyze").disabled = mode !== "clip";
     button("cancel").disabled = mode !== "analyzing";
     el("settings").disabled = busy || mode === "camera";
+    input("calibration").disabled = busy || mode === "camera";
+    button("blink-csv").disabled = !frames.length || busy;
+    calibration.updateControls();
     button("json").disabled = button("csv").disabled = !frames.length || busy;
     select("track").disabled =
       !(frames.some((f) => f.people.length) || live?.latest?.people.length) ||
@@ -148,6 +172,8 @@ export function initVideoWorkbench() {
   function clearResults() {
     frames = [];
     run = null;
+    blinkRenderKey = "";
+    el("blink-events").replaceChildren();
     renderSamples();
     select("track").replaceChildren(
       new Option("Analyze video to find people", ""),
@@ -164,6 +190,7 @@ export function initVideoWorkbench() {
   function release() {
     sourceGeneration++;
     stopLive();
+    calibration.reset();
     annotated?.discard();
     annotated = null;
     overlayBlob = null;
@@ -300,6 +327,7 @@ export function initVideoWorkbench() {
       el("source").textContent =
         `${name} · ${video.videoWidth}×${video.videoHeight} · ${duration.toFixed(1)} s`;
       if (captured) {
+        calibration.restore(captured.calibration);
         frames = captured.frames;
         run = captured.run;
         faceConnections = captured.faceConnections;
@@ -402,6 +430,8 @@ export function initVideoWorkbench() {
   async function startLive() {
     if (mode !== "camera" || !input("live").checked) return;
     stopLive();
+    // Restarting trackers reuses IDs; previous person calibrations cannot follow them.
+    calibration.reset();
     const fps = Number(select("fps").value),
       people = Number(select("people").value);
     const eyeDistance = input("calibration").value
@@ -498,6 +528,7 @@ export function initVideoWorkbench() {
             if (frames.length * people >= MAX_FRAMES)
               finishRecording("sample_limit");
           }
+          calibration.observe(frame);
           if (mode === "camera" || (mode === "recording" && time !== null)) {
             current.history.push(frame);
             current.history = current.history
@@ -564,6 +595,7 @@ export function initVideoWorkbench() {
       if (input("live").checked) void startLive();
       else {
         stopLive();
+        calibration.reset();
         el("live-status").textContent =
           "Continuous estimation is off. Camera preview remains active.";
         drawOverlay();
@@ -650,6 +682,7 @@ export function initVideoWorkbench() {
       opened.getVideoTracks()[0].addEventListener("ended", () => {
         if (mode === "recording") button("stop").click();
         else if (mode === "camera") {
+          calibration.reset();
           stopCamera();
           mode = "empty";
           controls();
@@ -668,6 +701,7 @@ export function initVideoWorkbench() {
     }
   };
   button("camera-off").onclick = () => {
+    calibration.reset();
     stopCamera();
     mode = "empty";
     el("source").textContent = "No video loaded";
@@ -718,6 +752,7 @@ export function initVideoWorkbench() {
           faceConnections,
           overlayBlob: null,
           overlayError,
+          calibration: calibration.snapshot(),
         };
         const composite = annotated;
         stopLive();
@@ -916,6 +951,7 @@ export function initVideoWorkbench() {
           metrics: poseMetrics(points, video.videoWidth, video.videoHeight),
         });
     });
+    persons.forEach((person) => calibration.enrich(person));
     return persons;
   }
 
@@ -962,6 +998,7 @@ export function initVideoWorkbench() {
     }
     const generation = sourceGeneration;
     video.pause();
+    calibration.reset();
     clearResults();
     mode = "analyzing";
     stopped = false;
@@ -1054,13 +1091,24 @@ export function initVideoWorkbench() {
     terminateWorker();
   };
   function rowsFor(id) {
-    return frames.flatMap((f) => {
+    const blink = encodeBlinks(
+      frames.map((f) => ({
+        time: f.time,
+        metrics: f.people.find((p) => p.id === id)?.metrics,
+      })),
+      Math.min(0.35, 1.6 / (run?.fps ?? 15)),
+    );
+    return frames.flatMap((f, index) => {
       const p = f.people.find((p) => p.id === id);
       return p
         ? [
             {
               time: f.time,
               ...p,
+              metrics: {
+                ...calibration.metrics(p),
+                blinkClosed: blink.states[index],
+              },
               audioRms:
                 audio && f.time < audio.duration
                   ? audio.rms[
@@ -1130,14 +1178,37 @@ export function initVideoWorkbench() {
     drawOverlay();
   }
   select("track").onchange = () => {
+    controls();
     recordOverlayChoice();
     updateSummary();
   };
   select("signal").onchange = () => {
+    const key = select("signal").value;
+    if (/torso|shoulder/i.test(key) && !calibration.busy) {
+      const source = live?.history ?? frames;
+      const poses = [
+        ...new Set(
+          source.flatMap((f) =>
+            f.people.filter((p) => p.pose).map((p) => p.id),
+          ),
+        ),
+      ];
+      if (poses.length === 1 && !poses.includes(select("track").value)) {
+        select("track").value = poses[0];
+        controls();
+        recordOverlayChoice();
+        updateSummary();
+      }
+    }
     drawMotion();
     renderSamples();
     drawOverlay();
   };
+  button("inferred-hips").onclick = () => {
+    select("signal").value = "torsoLeanEstimated";
+    select("signal").onchange();
+  };
+  input("show-gaze").onchange = drawOverlay;
   for (const key of [
     "show-overlay",
     "show-mesh",
@@ -1252,7 +1323,13 @@ export function initVideoWorkbench() {
       selected = select("track").value;
     paintPeople(ctx, width, height, frame, selected);
     const person = frame?.people.find((p) => p.id === selected);
-    const metric = person?.metrics?.[select("signal").value];
+    calibration.showGaze(person);
+    const metric =
+      select("signal").value === "blinkClosed"
+        ? selectedBlinkData().states[(live?.history ?? frames).indexOf(frame)]
+        : person
+          ? calibration.metrics(person)[select("signal").value]
+          : null;
     el("motion-current").textContent = `At current frame: ${format(metric)}`;
     const expressions = el("expressions");
     expressions.replaceChildren();
@@ -1428,24 +1505,49 @@ export function initVideoWorkbench() {
   function drawMotion() {
     const { c, ctx } = canvas("motion");
     axes(ctx, c.width, c.height);
+    const liveBlinkStates = live ? selectedBlinkData().states : [];
     const rows = ["camera", "recording"].includes(mode)
-      ? (live?.history ?? []).flatMap((f) => {
+      ? (live?.history ?? []).flatMap((f, index) => {
           const person = f.people.find((p) => p.id === select("track").value);
-          return person ? [{ time: f.time, ...person }] : [];
+          return person
+            ? [
+                {
+                  time: f.time,
+                  ...person,
+                  metrics: {
+                    ...calibration.metrics(person),
+                    blinkClosed: liveBlinkStates[index],
+                  },
+                },
+              ]
+            : [];
         })
       : rowsFor(select("track").value);
     const key = select("signal").value;
     const values = rows.map((r) => r.metrics?.[key]).filter(finite);
-    const coefficient = ["jawOpen", "smileAsymmetry"].includes(key),
-      angle = ["headRoll", "shoulderTilt", "torsoLean"].includes(key);
-    el("motion-unit").textContent = coefficient
-      ? "Model coefficient · 0–1"
-      : angle
-        ? "Image-plane degrees"
-        : (live?.settings.eyeDistance ?? run?.eyeDistance)
-          ? "Approximate image-plane mm"
-          : "Outer-eye distance units";
-    const postureSignal = ["shoulderTilt", "torsoLean"].includes(key);
+    const coefficient = [
+        "jawOpen",
+        "smileAsymmetry",
+        "blinkLeft",
+        "blinkRight",
+        "blinkClosed",
+      ].includes(key),
+      angle = /^(headRoll|shoulderTilt|torsoLean)/.test(key);
+    el("motion-unit").textContent =
+      key === "blinkClosed"
+        ? "Encoded bilateral closure · 0 or 1"
+        : key.startsWith("gaze")
+          ? "Calibrated screen coordinate · percent from top-left"
+          : key.startsWith("iris")
+            ? "Eye-relative iris position · eye-width units (not screen gaze)"
+            : coefficient
+              ? "Model coefficient · 0–1"
+              : angle
+                ? "Image-plane degrees"
+                : (live?.settings.eyeDistance ?? run?.eyeDistance)
+                  ? "Approximate image-plane mm"
+                  : "Outer-eye distance units";
+    const postureSignal = /^(shoulderTilt|torsoLean)/.test(key);
     let note = values.length
       ? `${values.length}/${rows.length} valid samples${live ? " · last 10 seconds" : ""}. Gaps are not interpolated.`
       : "No valid estimates for this signal.";
@@ -1458,14 +1560,31 @@ export function initVideoWorkbench() {
         note =
           "No pose is associated with this track. Choose a posture track if available, or bring your body into view.";
       else if (values.length < rows.length || !values.length)
-        note +=
-          key === "torsoLean"
-            ? " Torso lean needs both shoulders and hips in frame with visibility ≥ 0.6. Move the camera back to include your hips."
-            : " Shoulder tilt needs both shoulders in frame with visibility ≥ 0.6.";
+        note += key.startsWith("torsoLean")
+          ? " Torso lean needs both shoulders and hips in frame with visibility ≥ 0.6. Move the camera back to include your hips."
+          : " Shoulder tilt needs both shoulders in frame with visibility ≥ 0.6.";
     }
     if (!rows.length && !live && !run)
       note = "Enable the camera or analyze a video to explore movement.";
+    if (key.includes("Estimated"))
+      note = `${values.length}/${rows.length} model-inferred torso samples. Hips may be outside the image or occluded; this is a lower-confidence estimate, not an observed hip position.`;
+    if (key.endsWith("Relative") && !values.length)
+      note =
+        "Set a stable neutral reference for this track and channel under Calibration & gaze. Calibration cannot restore missing joints.";
+    if (key.startsWith("gaze") && !values.length)
+      note =
+        "Screen gaze needs a successful live-camera calibration and accuracy check. Unrelated uploaded clips provide eye-relative direction only.";
+    if (key.startsWith("blink"))
+      note +=
+        key === "blinkClosed"
+          ? " 1 = bilateral closure; 0 = not closed; missing eyes remain unavailable."
+          : " Raw closure coefficient; a high value is not itself a completed blink.";
+    button("inferred-hips").hidden =
+      key !== "torsoLean" ||
+      values.length === rows.length ||
+      !rows.some((r) => finite(r.metrics?.torsoLeanEstimated));
     el("motion-status").textContent = note;
+    renderBlinks();
     const limits = signalRange(values);
     if (!limits) {
       ctx.fillStyle = "#9dafc2";
@@ -1515,6 +1634,63 @@ export function initVideoWorkbench() {
     }
     ctx.fillStyle = "#c5d7e6";
     ctx.fillText(`${format(lo)} – ${format(hi)}`, 10, 14);
+    ctx.fillStyle = "#ff8dac";
+    for (const event of selectedBlinkData().events.filter(
+      (e) => e.complete && e.kind === "blink",
+    )) {
+      const x = ((event.onset - view().start) / (view().span || 1)) * c.width;
+      const w = Math.max(2, (event.duration / (view().span || 1)) * c.width);
+      ctx.fillRect(x, c.height - 27, w, 5);
+    }
+  }
+  function selectedBlinkData() {
+    const source = live?.history ?? frames,
+      id = select("track").value;
+    return encodeBlinks(
+      source.map((f) => ({
+        time: f.time,
+        metrics: f.people.find((p) => p.id === id)?.metrics,
+      })),
+      Math.min(0.35, 1.6 / (live?.settings.fps ?? run?.fps ?? 15)),
+    );
+  }
+  function allBlinkEvents() {
+    return [
+      ...new Set(
+        frames.flatMap((f) => f.people.filter((p) => p.face).map((p) => p.id)),
+      ),
+    ].flatMap((id) =>
+      encodeBlinks(
+        frames.map((f) => ({
+          time: f.time,
+          metrics: f.people.find((p) => p.id === id)?.metrics,
+        })),
+        Math.min(0.35, 1.6 / (run?.fps ?? 15)),
+      ).events.map((event) => ({ track: id, ...event })),
+    );
+  }
+  function renderBlinks() {
+    const result = selectedBlinkData(),
+      complete = result.events.filter((e) => e.complete && e.kind === "blink");
+    const key = JSON.stringify([select("track").value, result.events, mode]);
+    el("blink-status").textContent =
+      `${complete.length} completed blinks · ${result.events.filter((e) => !e.complete).length} incomplete closures${live ? " · last 10 seconds" : ""}.`;
+    if (key === blinkRenderKey) return;
+    blinkRenderKey = key;
+    const fragment = document.createDocumentFragment();
+    for (const event of result.events.slice(-50)) {
+      const b = document.createElement("button");
+      b.className = "vw-button";
+      b.disabled = mode !== "clip";
+      b.textContent = `${event.onset.toFixed(2)}–${event.offset.toFixed(2)} s · ${event.complete ? event.kind : "incomplete closure"}`;
+      b.onclick = () => {
+        video.currentTime = event.onset;
+        viewStart = followWindow(view(), event.onset, duration).start;
+        redrawTimeline();
+      };
+      fragment.append(b);
+    }
+    el("blink-events").replaceChildren(fragment);
   }
   function drawAudio() {
     const wave = canvas("wave"),
@@ -1629,8 +1805,36 @@ export function initVideoWorkbench() {
   });
   observer.observe(video);
   observer.observe(el("motion"));
+  function derivedFrames() {
+    const states = new Map(
+      [...new Set(frames.flatMap((f) => f.people.map((p) => p.id)))].map(
+        (id) => [
+          id,
+          encodeBlinks(
+            frames.map((f) => ({
+              time: f.time,
+              metrics: f.people.find((p) => p.id === id)?.metrics,
+            })),
+            Math.min(0.35, 1.6 / (run?.fps ?? 15)),
+          ).states,
+        ],
+      ),
+    );
+    return frames.map((frame, index) => ({
+      ...frame,
+      people: frame.people.map((person) => ({
+        ...person,
+        metrics: {
+          ...calibration.metrics(person),
+          blinkClosed: states.get(person.id)?.[index] ?? null,
+        },
+      })),
+    }));
+  }
   const exportData = () => ({
-    schemaVersion: "1.1",
+    schemaVersion: "1.2",
+    calibration: calibration.snapshot(),
+    blinkEvents: allBlinkEvents(),
     overlayVideo: {
       available: Boolean(overlayBlob),
       type: overlayBlob?.type ?? null,
@@ -1667,6 +1871,11 @@ export function initVideoWorkbench() {
       tracking:
         "geometry/velocity; 0.8 s expiry; ambiguous match starts new segment",
       visibilityThreshold: 0.6,
+      inferredTorso:
+        "Separate torsoLeanEstimated channel uses model-inferred hips; confidence is exported and observed torsoLean remains missing when hips are unreliable.",
+      blinkEncoding:
+        "bilateral close >=0.6, reopen both <=0.3; gaps terminate incomplete events; closures >1 second labelled eye_closure",
+      gaze: "eye-relative iris/head features; explicit nine-target ridge calibration and four held-out validation targets; no temporal filtering",
       correlation: "zero-lag Pearson; minimum 3 pairs; audio is mixed track",
       speed:
         "absolute first difference; gaps over 1.6 sample intervals excluded",
@@ -1675,15 +1884,20 @@ export function initVideoWorkbench() {
     summaries: [
       ...new Set(frames.flatMap((f) => f.people.map((p) => p.id))),
     ].map((id) => ({ id, ...summarize(rowsFor(id), 1 / (run?.fps ?? 15)) })),
-    frames,
+    frames: derivedFrames(),
   });
+  button("blink-csv").onclick = () =>
+    download(
+      new Blob([toCSV(allBlinkEvents())], { type: "text/csv;charset=utf-8" }),
+      "video-blink-events.csv",
+    );
   button("json").onclick = () =>
     download(
       new Blob([JSON.stringify(exportData())], { type: "application/json" }),
       "video-analysis.json",
     );
   button("csv").onclick = () => {
-    const rows = frames.flatMap((f) =>
+    const rows = derivedFrames().flatMap((f) =>
       (f.people.length
         ? f.people
         : [{ id: "", kind: "no_detection", ambiguous: false }]
@@ -1700,7 +1914,8 @@ export function initVideoWorkbench() {
         geometry_units: run?.units,
         sample_rate: run?.fps,
         calibration_eye_mm: run?.eyeDistance,
-        ...p.metrics,
+        ...calibration.metrics(p),
+        gaze_status: p.gaze?.status,
         ...Object.fromEntries(
           (p.blendshapes ?? []).map((s) => [
             `blendshape_${s.categoryName}`,
@@ -1725,6 +1940,7 @@ export function initVideoWorkbench() {
   };
   window.addEventListener("pagehide", () => {
     release();
+    calibration.dispose();
     observer.disconnect();
     cancelAnimationFrame(animation);
   });

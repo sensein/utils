@@ -861,3 +861,72 @@ main {
 body:has(#vw-about[open]) {
   overflow: hidden;
 }
+
+.vw-calibration summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.vw-calibration > *:not(summary) {
+  margin-top: 0.65rem;
+}
+.vw-calibration .vw-field {
+  max-width: 300px;
+}
+.vw-event-list {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  max-height: 160px;
+  overflow: auto;
+  margin-top: 0.5rem;
+}
+#vw-gaze-marker {
+  position: fixed;
+  width: 20px;
+  height: 20px;
+  border: 3px solid #b3472d;
+  background: #ffcb7777;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 20;
+}
+#vw-gaze-dialog {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  color: var(--color-ink);
+  background: #fffcf6;
+}
+.vw-gaze-instructions {
+  position: absolute;
+  left: 20%;
+  right: 20%;
+  top: 25%;
+  text-align: center;
+  font-size: 0.8rem;
+}
+.vw-gaze-instructions > * {
+  margin: 0.7rem 0;
+}
+#vw-gaze-target {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border: 7px solid #b3472d;
+  background: #111b29;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+body:has(#vw-gaze-dialog[open]) {
+  overflow: hidden;
+}
+#vw-gaze-readout {
+  margin-top: 0.5rem;
+}
