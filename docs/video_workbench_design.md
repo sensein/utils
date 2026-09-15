@@ -131,3 +131,11 @@ Evidence: MediaPipe's [face graph](https://github.com/google-ai-edge/mediapipe/b
 - [x] Check desktop/mobile placement, download controls and dialog interactions, then update the existing PR.
 
 Browser checks passed at 1440×1000 and 390×844: export controls occupy only the video column, original-video download works, the dialog fits the viewport, Close/Escape dismiss it, and keyboard focus returns to About. No horizontal overflow or uncaught browser errors.
+
+
+## Full-height analysis column
+
+- [x] Remove the right column's viewport height cap and internal scrolling. Let it span the workspace row beside the complete video/download column, with all analysis sections in the page flow.
+- [x] Verify desktop/mobile flow and publish this correction as part of the merge follow-up. The sample table keeps its own scrolling area.
+
+Browser checks confirm the right column has no height cap or internal overflow, spans the full workspace row, and keeps the mobile video pinned without horizontal overflow. Packaging and JavaScript syntax checks pass.
