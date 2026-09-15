@@ -893,7 +893,7 @@ export function initVideoWorkbench() {
     if (!values.length) {
       ctx.fillStyle = "#9dafc2";
       ctx.fillText(
-        "Analyze video and choose a detected track to see movement.",
+        "Analyze a clip to explore movement.",
         20,
         70,
       );
