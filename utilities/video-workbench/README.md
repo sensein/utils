@@ -19,7 +19,7 @@ Open http://localhost:8765/utilities/video-workbench/index.html. The existing ca
 2. **Choose overlays:** the **Show MediaPipe overlay** checkbox controls visibility independently of estimation and data capture. Mesh, face keypoints and posture keypoints have their own layer checkboxes. **Also save a video with overlays** records a second downloadable video with the visible layers and microphone audio; the original video is retained separately. Turning off display never stops landmark capture.
 3. **Analyze existing clips:** select an interval, 5/15/30 samples per second, and up to four people. Face analysis always runs; posture is optional. Cancel retains completed frames. Reanalysis replaces the active results, so export live data first if you want to preserve that run.
 4. **Explore:** select a face or posture track. Video remains visible while the analysis pane scrolls through aligned signals, person summaries and sampled measurements. Use **Time window** to zoom, **Visible interval** to pan, or horizontal/Shift-scroll over any chart. All three signals share the same interval. Hover over any signal for a linked dashed gold inspection line and time; the solid white line marks playback. Hovering does not seek. Click a chart or sample timestamp to seek; the **Playback** slider also supports keyboard seeking. **Follow playback** advances the charts and scrolls to the current sample; manual panning turns it off. Summaries use the full analyzed interval, regardless of zoom. “Isolate selected person” is under **Overlay options**.
-5. **Export:** JSON contains the full sampled timeline, raw landmarks, blendshapes, transform matrices, pose world coordinates, summaries, model URLs, processing settings, browser provenance and partial-result flags. CSV contains one row per person per sample, with explicit `no_detection` rows when no person is detected. Download before clearing or closing the tab.
+5. **Export:** use **Take your work with you** directly beneath the video. JSON contains the full sampled timeline, raw landmarks, blendshapes, transform matrices, pose world coordinates, summaries, model URLs, processing settings, browser provenance and partial-result flags. CSV contains one row per person per sample, with explicit `no_detection` rows when no person is detected. Download before clearing or closing the tab.
 
 ## Privacy and resources
 
@@ -40,7 +40,7 @@ Open http://localhost:8765/utilities/video-workbench/index.html. The existing ca
 
 ## Measurements and limitations
 
-See [the design and validation record](../../docs/video_workbench_design.md) and the page's Methods section for formulas and references.
+See [the design and validation record](../../docs/video_workbench_design.md) and the **About ?** button beside the page title for formulas and references.
 
 - Facial geometry is **2D**, aspect-corrected, and normalized by outer-eye distance (33–263). Local lower-lip (14) and jaw (152) coordinates remove image translation, scale and in-plane roll, not out-of-plane head rotation.
 - Optional **measured outer-eye distance** (not interpupillary distance) provides approximate 2D millimeters for single-person clips. It is not the supplied Sanchez et al. paper's calibrated, head-stabilized 3D pipeline. Raw face z remains model-relative.

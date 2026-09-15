@@ -10,7 +10,7 @@ import {
   summarize,
   toCSV,
 } from "./metrics.mjs";
-export const BUILD_VERSION = "26.09.15-signals.1";
+export const BUILD_VERSION = "26.09.15-signals.2";
 const MAX_BYTES = 250 * 1024 * 1024,
   MAX_SECONDS = 300,
   MAX_FRAMES = 4500;
@@ -24,6 +24,18 @@ export function initVideoWorkbench() {
   const button = (id) => el(id),
     input = (id) => el(id),
     select = (id) => el(id);
+  button("about-open").onclick = () => el("about").showModal();
+  el("about").addEventListener("click", (event) => {
+    if (event.target !== el("about")) return;
+    const bounds = el("about").getBoundingClientRect();
+    if (
+      event.clientX < bounds.left ||
+      event.clientX > bounds.right ||
+      event.clientY < bounds.top ||
+      event.clientY > bounds.bottom
+    )
+      el("about").close();
+  });
   const video = el("video"),
     overlay = el("overlay");
   let mode = "empty";

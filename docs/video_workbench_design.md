@@ -123,3 +123,11 @@ Evidence: MediaPipe's [face graph](https://github.com/google-ai-edge/mediapipe/b
 - Both face and pose outputs were identical when the exact same bitmap was processed before and after a shifted image, verifying removal of cross-frame smoothing state with the pinned runtime. Our geometric identity tracking remains separate from these raw landmark outputs.
 - Browser checks verified three aligned pointer lines, zoom-correct inspection time, no seeking on hover, pointer leave/reset cleanup, normalized waveform pixel extent, and mobile layout. Visual inspection caught cursor lines appearing above the sticky mobile video; isolating each chart's stacking context fixes this.
 - Fixtures use Google's public `portrait.jpg` and `pose.jpg` assets with synthetic audio. Screenshots/exports remain under ignored `output/playwright/`. Physical cameras, other browsers, and scientific ground-truth validation remain outside this check.
+
+## Export and About layout
+
+- [x] Move “Take your work with you” into the video column, directly beneath the preview.
+- [x] Move methods/research notes into an About dialog opened beside the title; support keyboard focus, Escape and an explicit Close button.
+- [x] Check desktop/mobile placement, download controls and dialog interactions, then update the existing PR.
+
+Browser checks passed at 1440×1000 and 390×844: export controls occupy only the video column, original-video download works, the dialog fits the viewport, Close/Escape dismiss it, and keyboard focus returns to About. No horizontal overflow or uncaught browser errors.
